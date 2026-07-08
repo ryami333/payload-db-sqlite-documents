@@ -18,6 +18,7 @@ export default defineConfig({
       external: [
         ...builtinModules,
         ...builtinModules.map((item) => `node:${item}`),
+        "payload",
       ],
     },
   },
