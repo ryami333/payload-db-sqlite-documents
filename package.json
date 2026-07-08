@@ -26,7 +26,7 @@
     "README.md",
     "LICENSE*"
   ],
-  "packageManager": "yarn@4.17.0",
+  "packageManager": "yarn@4.17.1",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "26.1.0",
