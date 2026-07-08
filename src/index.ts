@@ -1,10 +1,32 @@
-import type { BaseDatabaseAdapter } from "payload";
+import { createDatabaseAdapter, defaultBeginTransaction } from "payload";
+
+import type { BaseDatabaseAdapter, DatabaseAdapterObj, Payload } from "payload";
 
 /**
- * Placeholder implementation used for every adapter method until it is built
- * out. Throwing keeps the runtime honest — nothing silently no-ops — while the
- * `never` return type lets each stub satisfy its method signature on the
- * {@link BaseDatabaseAdapter} interface.
+ * Options accepted by {@link sqliteDocumentsAdapter}.
+ *
+ * Intentionally sparse for now — this will grow to mirror the surface of
+ * `@payloadcms/db-sqlite`'s adapter options (connection/client, `push`,
+ * `migrationDir`, etc.) as those features come online.
+ */
+export interface Args {
+  /** Directory Payload reads/writes migration files from. */
+  migrationDir?: string;
+}
+
+/**
+ * The initialised adapter instance. Identical to {@link BaseDatabaseAdapter}
+ * for now; adapter-specific state (the SQLite connection handle, prepared
+ * statements, etc.) will be added here as methods are implemented.
+ */
+export type SQLiteDocumentsAdapter = BaseDatabaseAdapter;
+
+/**
+ * Placeholder used for every data method until it is built out. Throwing keeps
+ * the runtime honest — nothing silently no-ops — while the `never` return type
+ * lets each stub satisfy its method signature on {@link BaseDatabaseAdapter}
+ * (a `() => never` is assignable to any of the `(args) => Promise<...>` method
+ * types).
  */
 const notImplemented = (): never => {
   throw new Error("payload-db-sqlite-documents: not implemented yet");
@@ -15,71 +37,77 @@ const notImplemented = (): never => {
  * schemaless / "documents" strategy (in the spirit of `@payloadcms/db-mongodb`)
  * rather than the relational strategy of `@payloadcms/db-sqlite`.
  *
- * Nothing is implemented yet: this returns a boilerplate object shaped like a
- * {@link BaseDatabaseAdapter} so the public API can be pinned down first. Every
+ * Follows Payload's factory convention: this returns a lightweight
+ * {@link DatabaseAdapterObj} up front, and Payload later calls its `init` with
+ * the live `payload` instance to produce the actual adapter. Transaction and
+ * migration methods are supplied by {@link createDatabaseAdapter}; every data
  * method is a {@link notImplemented} stub for now.
  */
-export const sqliteDocumentsAdapter = () => {
+export const sqliteDocumentsAdapter = (
+  args: Args = {},
+): DatabaseAdapterObj<SQLiteDocumentsAdapter> => {
+  function init({ payload }: { payload: Payload }): SQLiteDocumentsAdapter {
+    // TODO: open the SQLite connection handle here (driver TBD — likely
+    // better-sqlite3) once a data method needs it. While everything is a stub
+    // there is nothing to connect to.
+
+    return createDatabaseAdapter<SQLiteDocumentsAdapter>({
+      name: "sqlite-documents",
+      packageName: "payload-db-sqlite-documents",
+
+      // Populated with the live instance by Payload core at init time.
+      payload,
+
+      // Document/Mongo-style storage: default IDs are text, matching the
+      // `@payloadcms/db-mongodb` adapter this targets as a local-dev stand-in.
+      defaultIDType: "text",
+      migrationDir: args.migrationDir,
+
+      // Transactions must be supplied (the arg type requires them), but there's
+      // nothing to implement yet: use Payload's default begin + no-op
+      // commit/rollback so a booted Payload doesn't choke. Migration methods,
+      // by contrast, are optional and left to createDatabaseAdapter's defaults.
+      beginTransaction: defaultBeginTransaction(),
+      commitTransaction: async () => {},
+      rollbackTransaction: async () => {},
+
+      // Collections — reads
+      count: notImplemented,
+      find: notImplemented,
+      findDistinct: notImplemented,
+      findOne: notImplemented,
+
+      // Collections — writes
+      create: notImplemented,
+      deleteMany: notImplemented,
+      deleteOne: notImplemented,
+      updateMany: notImplemented,
+      updateOne: notImplemented,
+      upsert: notImplemented,
+
+      // Globals
+      createGlobal: notImplemented,
+      findGlobal: notImplemented,
+      updateGlobal: notImplemented,
+
+      // Versions
+      countVersions: notImplemented,
+      createVersion: notImplemented,
+      deleteVersions: notImplemented,
+      findVersions: notImplemented,
+      queryDrafts: notImplemented,
+      updateVersion: notImplemented,
+
+      // Global versions
+      countGlobalVersions: notImplemented,
+      createGlobalVersion: notImplemented,
+      findGlobalVersions: notImplemented,
+      updateGlobalVersion: notImplemented,
+    });
+  }
+
   return {
-    name: "sqlite-documents",
-    packageName: "payload-db-sqlite-documents",
-    // Document/Mongo-style storage: default IDs are text, matching the
-    // `@payloadcms/db-mongodb` adapter that this targets as a local-dev stand-in.
     defaultIDType: "text",
-    migrationDir: "./migrations",
-
-    // Populated by Payload core when the adapter is initialised.
-    // @ts-expect-error not implemented yet
-    payload: undefined,
-
-    // Transactions
-    beginTransaction: notImplemented,
-    commitTransaction: notImplemented,
-    rollbackTransaction: notImplemented,
-
-    // Migrations
-    createMigration: notImplemented,
-    migrate: notImplemented,
-    migrateDown: notImplemented,
-    migrateFresh: notImplemented,
-    migrateRefresh: notImplemented,
-    migrateReset: notImplemented,
-    migrateStatus: notImplemented,
-
-    // Collections — reads
-    count: notImplemented,
-    find: notImplemented,
-    findDistinct: notImplemented,
-    findOne: notImplemented,
-
-    // Collections — writes
-    create: notImplemented,
-    deleteMany: notImplemented,
-    deleteOne: notImplemented,
-    updateMany: notImplemented,
-    updateOne: notImplemented,
-    upsert: notImplemented,
-
-    // Globals
-    createGlobal: notImplemented,
-    findGlobal: notImplemented,
-    updateGlobal: notImplemented,
-
-    // Versions
-    countVersions: notImplemented,
-    createVersion: notImplemented,
-    deleteVersions: notImplemented,
-    findVersions: notImplemented,
-    queryDrafts: notImplemented,
-    updateVersion: notImplemented,
-
-    // Global versions
-    countGlobalVersions: notImplemented,
-    createGlobalVersion: notImplemented,
-    findGlobalVersions: notImplemented,
-    updateGlobalVersion: notImplemented,
-
-    // Jobs queue
-    updateJobs: notImplemented,
-  } satisfies BaseDatabaseAdapter;
+    init,
+  };
 };
