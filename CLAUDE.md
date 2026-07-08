@@ -19,11 +19,11 @@ The best reference implementation to study is [`@payloadcms/db-sqlite`](https://
 ## Commands
 
 ```sh
-yarn build       # vite build (bundles src -> dist/index.js) + tsc (emits dist/index.d.mts)
+yarn build       # vite build (bundles src -> dist/index.js) + tsc (emits dist/index.d.ts)
 yarn test        # vitest run — single run, used in CI
 yarn test:watch  # vitest — watch mode
 yarn lint        # eslint .
-yarn tsc         # typecheck (add --noEmit to check without writing dist output)
+yarn tsc         # typecheck only (base tsconfig sets noEmit; declarations are emitted by `yarn build`)
 yarn release     # release-it — bumps version, tags, publishes to npm, creates GitHub release
 ```
 
@@ -38,7 +38,8 @@ yarn prettier <path> --write
 ## Tooling notes
 
 - Package manager is **Yarn Berry (4.17.0)**, pinned via `packageManager` in `package.json` and vendored at `.yarn/releases/yarn-4.17.0.cjs`. Use `yarn`, not `npm`.
-- Source is plain JS (`.mjs`) rather than `.ts`. TypeScript is still used for typechecking/declaration output: `tsconfig.json` has `allowJs: true` so `tsc --emitDeclarationOnly` can generate `.d.mts` files from the JSDoc-typed `.mjs` source in `src/`. `tsconfig.json`'s `include` is scoped to `src/**/*` (excluding `*.test.mjs`) — root-level config files are intentionally not typechecked by `tsc`.
-- `vite.config.mjs` builds `src/index.mjs` as an ES library entry to `dist/index.js`; Node builtins are externalized rather than bundled. `package.json#exports` and `#types` point at `dist/index.js` / `dist/index.d.mts` — if new entry points are added (mirroring `db-sqlite`'s subpath exports, e.g. a `./types` export), they need to be added in three places: `vite.config.mjs` `build.lib.entry`, `tsconfig.json` (if scope changes), and `package.json#exports`.
+- Source is **TypeScript** (`.ts`) in `src/`. Vite compiles/bundles it and `tsc --emitDeclarationOnly` generates `.d.ts` declarations. `tsconfig.json`'s `include` is scoped to `src/**/*` — root-level config files are intentionally not typechecked by `tsc`. `allowJs` + `checkJs` are on, so the `.mjs` test files are typechecked too (Vitest still transforms/runs them via Vite).
+- There are **two tsconfigs**: `tsconfig.json` is typecheck-only (`noEmit: true`) and covers everything under `src/` including `*.test.mjs` — this is what `yarn tsc` uses. `tsconfig.build.json` extends it, flips `noEmit` off (`emitDeclarationOnly`), and excludes test files; this is what `yarn build`'s `tsc` step uses, so test declarations never leak into `dist/` (and thus into the published package).
+- `vite.config.mjs` builds `src/index.ts` as an ES library entry to `dist/index.js`; Node builtins are externalized rather than bundled. `package.json#exports` and `#types` point at `dist/index.js` / `dist/index.d.ts` — if new entry points are added (mirroring `db-sqlite`'s subpath exports, e.g. a `./types` export), they need to be added in three places: `vite.config.mjs` `build.lib.entry`, `tsconfig.json`/`tsconfig.build.json` (if scope changes), and `package.json#exports`.
 - CI (`.github/workflows/quality-assurance.yml`) runs against Node 22/24/26. The `quality-assurance` job matrix re-runs `yarn up @types/node@<version>` per Node version before typechecking, so typechecking is validated against each supported Node's types — don't assume a single pinned `@types/node` version is authoritative.
 - `.release-it.js` runs `prettier --check`, `tsc --noEmit`, `eslint .`, and `yarn test` as pre-release gates (`before:init`), and rebuilds (`after:bump`) before publishing. Releases require a clean working directory on `main` with an upstream branch.
