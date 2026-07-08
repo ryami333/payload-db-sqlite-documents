@@ -37,7 +37,7 @@
     "vitest": "^4.1.10"
   },
   "scripts": {
-    "build": "vite build && tsc",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
