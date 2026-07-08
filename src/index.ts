@@ -2,6 +2,8 @@ import { createDatabaseAdapter, defaultBeginTransaction } from "payload";
 
 import type { BaseDatabaseAdapter, DatabaseAdapterObj, Payload } from "payload";
 
+import { notImplemented } from "./helpers/notImplemented.js";
+
 /**
  * Options accepted by {@link sqliteDocumentsAdapter}.
  *
@@ -20,17 +22,6 @@ export interface Args {
  * statements, etc.) will be added here as methods are implemented.
  */
 export type SQLiteDocumentsAdapter = BaseDatabaseAdapter;
-
-/**
- * Placeholder used for every data method until it is built out. Throwing keeps
- * the runtime honest — nothing silently no-ops — while the `never` return type
- * lets each stub satisfy its method signature on {@link BaseDatabaseAdapter}
- * (a `() => never` is assignable to any of the `(args) => Promise<...>` method
- * types).
- */
-const notImplemented = (): never => {
-  throw new Error("payload-db-sqlite-documents: not implemented yet");
-};
 
 /**
  * Create a Payload database adapter that persists data in SQLite using a
