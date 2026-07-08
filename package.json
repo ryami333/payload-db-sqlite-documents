@@ -13,6 +13,9 @@
   "engines": {
     "node": "^22 || ^24 || ^26"
   },
+  "peerDependencies": {
+    "payload": "^3.85.2"
+  },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public"
