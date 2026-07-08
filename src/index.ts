@@ -2,7 +2,29 @@ import { createDatabaseAdapter, defaultBeginTransaction } from "payload";
 
 import type { BaseDatabaseAdapter, DatabaseAdapterObj, Payload } from "payload";
 
-import { notImplemented } from "./helpers/notImplemented.js";
+import { count } from "./handlers/count.js";
+import { countGlobalVersions } from "./handlers/countGlobalVersions.js";
+import { countVersions } from "./handlers/countVersions.js";
+import { create } from "./handlers/create.js";
+import { createGlobal } from "./handlers/createGlobal.js";
+import { createGlobalVersion } from "./handlers/createGlobalVersion.js";
+import { createVersion } from "./handlers/createVersion.js";
+import { deleteMany } from "./handlers/deleteMany.js";
+import { deleteOne } from "./handlers/deleteOne.js";
+import { deleteVersions } from "./handlers/deleteVersions.js";
+import { find } from "./handlers/find.js";
+import { findDistinct } from "./handlers/findDistinct.js";
+import { findGlobal } from "./handlers/findGlobal.js";
+import { findGlobalVersions } from "./handlers/findGlobalVersions.js";
+import { findOne } from "./handlers/findOne.js";
+import { findVersions } from "./handlers/findVersions.js";
+import { queryDrafts } from "./handlers/queryDrafts.js";
+import { updateGlobal } from "./handlers/updateGlobal.js";
+import { updateGlobalVersion } from "./handlers/updateGlobalVersion.js";
+import { updateMany } from "./handlers/updateMany.js";
+import { updateOne } from "./handlers/updateOne.js";
+import { updateVersion } from "./handlers/updateVersion.js";
+import { upsert } from "./handlers/upsert.js";
 
 /**
  * Options accepted by {@link sqliteDocumentsAdapter}.
@@ -32,7 +54,7 @@ export type SQLiteDocumentsAdapter = BaseDatabaseAdapter;
  * {@link DatabaseAdapterObj} up front, and Payload later calls its `init` with
  * the live `payload` instance to produce the actual adapter. Transaction and
  * migration methods are supplied by {@link createDatabaseAdapter}; every data
- * method is a {@link notImplemented} stub for now.
+ * method is a stub from `./handlers` for now.
  */
 export const sqliteDocumentsAdapter = (
   args: Args = {},
@@ -63,37 +85,37 @@ export const sqliteDocumentsAdapter = (
       rollbackTransaction: async () => {},
 
       // Collections — reads
-      count: notImplemented,
-      find: notImplemented,
-      findDistinct: notImplemented,
-      findOne: notImplemented,
+      count,
+      find,
+      findDistinct,
+      findOne,
 
       // Collections — writes
-      create: notImplemented,
-      deleteMany: notImplemented,
-      deleteOne: notImplemented,
-      updateMany: notImplemented,
-      updateOne: notImplemented,
-      upsert: notImplemented,
+      create,
+      deleteMany,
+      deleteOne,
+      updateMany,
+      updateOne,
+      upsert,
 
       // Globals
-      createGlobal: notImplemented,
-      findGlobal: notImplemented,
-      updateGlobal: notImplemented,
+      createGlobal,
+      findGlobal,
+      updateGlobal,
 
       // Versions
-      countVersions: notImplemented,
-      createVersion: notImplemented,
-      deleteVersions: notImplemented,
-      findVersions: notImplemented,
-      queryDrafts: notImplemented,
-      updateVersion: notImplemented,
+      countVersions,
+      createVersion,
+      deleteVersions,
+      findVersions,
+      queryDrafts,
+      updateVersion,
 
       // Global versions
-      countGlobalVersions: notImplemented,
-      createGlobalVersion: notImplemented,
-      findGlobalVersions: notImplemented,
-      updateGlobalVersion: notImplemented,
+      countGlobalVersions,
+      createGlobalVersion,
+      findGlobalVersions,
+      updateGlobalVersion,
     });
   }
 
