@@ -17,7 +17,7 @@ export default {
   hooks: {
     "before:init": [
       "yarn prettier . --check",
-      "yarn tsc --noEmit",
+      "yarn tsc",
       "yarn eslint .",
       "yarn test",
     ],
