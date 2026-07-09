@@ -44,7 +44,7 @@ describe("sqliteDocumentsAdapter", () => {
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
     expect(() => adapter.createGlobal(anyArgs)).toThrow("not implemented yet");
-    expect(() => adapter.findDistinct(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.findGlobal(anyArgs)).toThrow("not implemented yet");
   });
 
   describe("create", () => {
@@ -991,6 +991,161 @@ describe("sqliteDocumentsAdapter", () => {
         /** @type {any} */ ({ collection: "posts" }),
       );
       expect(totalDocs).toBe(1);
+    });
+  });
+
+  describe("findDistinct", () => {
+    /**
+     * Seed posts with the given statuses (one post each).
+     *
+     * @param {ReturnType<ReturnType<typeof sqliteDocumentsAdapter>["init"]>} adapter
+     * @param {(string | undefined)[]} statuses
+     */
+    const seedStatuses = async (adapter, statuses) => {
+      for (const status of statuses) {
+        await adapter.create(
+          /** @type {any} */ ({
+            collection: "posts",
+            data:
+              status === undefined ? { title: "x" } : { title: "x", status },
+          }),
+        );
+      }
+    };
+
+    it("returns each distinct value once, ordered ascending", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedStatuses(adapter, ["draft", "published", "draft"]);
+
+      const result = /** @type {any} */ (
+        await adapter.findDistinct(
+          /** @type {any} */ ({ collection: "posts", field: "status" }),
+        )
+      );
+
+      expect(result.values).toEqual([
+        { status: "draft" },
+        { status: "published" },
+      ]);
+      expect(result.totalDocs).toBe(2);
+    });
+
+    it("excludes docs missing the field from values and count", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedStatuses(adapter, ["draft", undefined, "published"]);
+
+      const result = /** @type {any} */ (
+        await adapter.findDistinct(
+          /** @type {any} */ ({ collection: "posts", field: "status" }),
+        )
+      );
+
+      expect(result.values).toEqual([
+        { status: "draft" },
+        { status: "published" },
+      ]);
+      expect(result.totalDocs).toBe(2);
+    });
+
+    it("honours a descending sort direction", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedStatuses(adapter, ["draft", "published", "archived"]);
+
+      const result = /** @type {any} */ (
+        await adapter.findDistinct(
+          /** @type {any} */ ({
+            collection: "posts",
+            field: "status",
+            sort: "-status",
+          }),
+        )
+      );
+
+      expect(result.values.map((/** @type {any} */ v) => v.status)).toEqual([
+        "published",
+        "draft",
+        "archived",
+      ]);
+    });
+
+    it("respects a where filter", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { status: "draft", locale: "en" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { status: "published", locale: "en" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { status: "secret", locale: "de" },
+        }),
+      );
+
+      const result = /** @type {any} */ (
+        await adapter.findDistinct(
+          /** @type {any} */ ({
+            collection: "posts",
+            field: "status",
+            where: { locale: { equals: "en" } },
+          }),
+        )
+      );
+
+      expect(result.values).toEqual([
+        { status: "draft" },
+        { status: "published" },
+      ]);
+      expect(result.totalDocs).toBe(2);
+    });
+
+    it("paginates distinct values with limit/page metadata", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedStatuses(adapter, ["a", "b", "c", "d", "e"]);
+
+      const result = /** @type {any} */ (
+        await adapter.findDistinct(
+          /** @type {any} */ ({
+            collection: "posts",
+            field: "status",
+            limit: 2,
+            page: 2,
+          }),
+        )
+      );
+
+      expect(result.values).toEqual([{ status: "c" }, { status: "d" }]);
+      expect(result).toMatchObject({
+        totalDocs: 5,
+        totalPages: 3,
+        page: 2,
+        limit: 2,
+        hasPrevPage: true,
+        hasNextPage: true,
+        prevPage: 1,
+        nextPage: 3,
+        pagingCounter: 3,
+      });
+    });
+
+    it("returns an empty, well-formed result for an untouched collection", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const result = /** @type {any} */ (
+        await adapter.findDistinct(
+          /** @type {any} */ ({ collection: "untouched", field: "status" }),
+        )
+      );
+
+      expect(result.values).toEqual([]);
+      expect(result).toMatchObject({ totalDocs: 0, totalPages: 1, page: 1 });
     });
   });
 });
