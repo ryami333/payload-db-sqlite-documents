@@ -44,7 +44,7 @@ describe("sqliteDocumentsAdapter", () => {
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
     expect(() => adapter.find(anyArgs)).toThrow("not implemented yet");
-    expect(() => adapter.findOne(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.count(anyArgs)).toThrow("not implemented yet");
   });
 
   describe("create", () => {
@@ -91,6 +91,72 @@ describe("sqliteDocumentsAdapter", () => {
       );
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe("findOne", () => {
+    it("reads a created document back through the public API", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "fixed-id",
+          data: { title: "Pinned" },
+        }),
+      );
+
+      const found = await adapter.findOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "fixed-id" } },
+        }),
+      );
+
+      expect(found).toEqual({ id: "fixed-id", title: "Pinned" });
+    });
+
+    it("matches on a non-id field pulled out of the JSON doc", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({ collection: "posts", data: { title: "Hello" } }),
+      );
+
+      const found = /** @type {any} */ (
+        await adapter.findOne(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { title: { equals: "Hello" } },
+          }),
+        )
+      );
+
+      expect(found?.title).toBe("Hello");
+    });
+
+    it("returns null when nothing matches", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const found = await adapter.findOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "missing" } },
+        }),
+      );
+
+      expect(found).toBeNull();
+    });
+
+    it("returns null for a collection that has never been written to", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      // Must not throw on the lazily-created (empty) table — just find nothing.
+      const found = await adapter.findOne(
+        /** @type {any} */ ({ collection: "untouched", where: {} }),
+      );
+
+      expect(found).toBeNull();
     });
   });
 });
