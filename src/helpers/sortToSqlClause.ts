@@ -1,6 +1,6 @@
 import type { Sort } from "payload";
 
-import { columnFor } from "./columnFor.js";
+import { fieldToSqlColumn } from "./fieldToSqlColumn.js";
 
 /**
  * A parameterised `ORDER BY` body: the `clause` is what follows `ORDER BY`
@@ -16,7 +16,7 @@ export interface SortSql {
  * Translate a Payload {@link Sort} into a parameterised SQLite `ORDER BY` body.
  *
  * A sort is a field name or a list of them; a leading `-` means descending
- * (`"-createdAt"`). Fields are resolved through {@link columnFor}, so `id`
+ * (`"-createdAt"`). Fields are resolved through {@link fieldToSqlColumn}, so `id`
  * orders on the indexed column and everything else on `json_extract(doc, …)`.
  *
  * A stable `id` tiebreaker is always appended (unless the caller already sorts
@@ -25,7 +25,7 @@ export interface SortSql {
  * order can drop or duplicate rows across pages. With no sort at all, the result
  * is simply `"id" ASC`.
  */
-export const sortToSql = (sort: Sort | undefined): SortSql => {
+export const sortToSqlClause = (sort: Sort | undefined): SortSql => {
   const fields = sort === undefined ? [] : Array.isArray(sort) ? sort : [sort];
 
   const parts: string[] = [];
@@ -40,12 +40,12 @@ export const sortToSql = (sort: Sort | undefined): SortSql => {
     if (!path) continue;
     if (path === "id") sortsById = true;
 
-    const { column, params: columnParams } = columnFor(path);
+    const { column, params: columnParams } = fieldToSqlColumn(path);
     parts.push(`${column} ${descending ? "DESC" : "ASC"}`);
     params.push(...columnParams);
   }
 
-  if (!sortsById) parts.push(`${columnFor("id").column} ASC`);
+  if (!sortsById) parts.push(`${fieldToSqlColumn("id").column} ASC`);
 
   return { clause: parts.join(", "), params };
 };

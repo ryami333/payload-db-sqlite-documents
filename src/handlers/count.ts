@@ -1,13 +1,13 @@
 import type { Count } from "payload";
 
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { whereToSql } from "../helpers/whereToSql.js";
+import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
  * Count the documents in a collection matching `where`.
  *
- * Reuses {@link whereToSql} to compile the same parameterised clause the reads
+ * Reuses {@link whereToSqlClause} to compile the same parameterised clause the reads
  * use (currently `equals`/`and`/`or` only), then runs `COUNT(*)` over it.
  * Ensuring the table exists first means counting a never-written-to collection
  * returns `0` rather than throwing. This is also the count `find` will lean on
@@ -25,7 +25,7 @@ export const count: Count = async function count(
     slug: collection,
   });
 
-  const { clause, params } = whereToSql(where);
+  const { clause, params } = whereToSqlClause(where);
 
   const row = this.connection
     .prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE ${clause}`)

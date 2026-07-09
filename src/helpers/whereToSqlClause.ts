@@ -1,6 +1,6 @@
 import type { Where, WhereField } from "payload";
 
-import { quoteSqliteIdentifier } from "./quoteSqliteIdentifier.js";
+import { fieldToSqlColumn } from "./fieldToSqlColumn.js";
 
 /**
  * Values we know how to bind as SQLite statement parameters. Booleans are
@@ -33,7 +33,7 @@ export interface WhereSql {
  * than silently returning wrong rows — the surface will grow from here. See the
  * full operator set in Payload's `validOperators`.
  */
-export const whereToSql = (where: Where | undefined): WhereSql => {
+export const whereToSqlClause = (where: Where | undefined): WhereSql => {
   if (!where) return { clause: "1", params: [] };
 
   const parts: string[] = [];
@@ -43,7 +43,7 @@ export const whereToSql = (where: Where | undefined): WhereSql => {
     if (value === undefined) continue;
 
     if ((key === "and" || key === "or") && Array.isArray(value)) {
-      const nested = value.map(whereToSql);
+      const nested = value.map(whereToSqlClause);
       // An empty and/or constrains nothing; fold it to the always-true clause
       // so we never emit a syntactically invalid empty `()`.
       const joined =
@@ -76,7 +76,7 @@ const fieldConstraintToSql = (
   fieldPath: string,
   constraint: WhereField,
 ): WhereSql => {
-  const { column, columnParams } = columnFor(fieldPath);
+  const { column, params: columnParams } = fieldToSqlColumn(fieldPath);
 
   const parts: string[] = [];
   const params: SqliteParam[] = [];
@@ -102,19 +102,6 @@ const fieldConstraintToSql = (
   if (parts.length === 0) return { clause: "1", params: [] };
   return { clause: parts.join(" AND "), params };
 };
-
-/**
- * Map a Payload field path to the SQL expression that reads it, along with any
- * parameters that expression binds. `id` is a real indexed column; everything
- * else is pulled out of the JSON `doc` via `json_extract`, with the extraction
- * path bound as a parameter so field names are never interpolated into SQL.
- */
-const columnFor = (
-  fieldPath: string,
-): { column: string; columnParams: SqliteParam[] } =>
-  fieldPath === "id"
-    ? { column: quoteSqliteIdentifier("id"), columnParams: [] }
-    : { column: "json_extract(doc, ?)", columnParams: [`$.${fieldPath}`] };
 
 /**
  * Coerce a query value into something `node:sqlite` can bind. Booleans become

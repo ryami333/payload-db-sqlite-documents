@@ -1,14 +1,14 @@
 import type { FindOne } from "payload";
 
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { whereToSql } from "../helpers/whereToSql.js";
+import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
  * Fetch the first document in a collection matching `where`, or `null`.
  *
  * The stored JSON `doc` is read back and parsed; the `where` is compiled to a
- * parameterised clause by {@link whereToSql} (currently `equals`/`and`/`or`
+ * parameterised clause by {@link whereToSqlClause} (currently `equals`/`and`/`or`
  * only). Ensuring the table exists first keeps a query against a
  * never-written-to collection from throwing — it simply finds nothing.
  *
@@ -24,7 +24,7 @@ export const findOne: FindOne = async function findOne(
     slug: collection,
   });
 
-  const { clause, params } = whereToSql(where);
+  const { clause, params } = whereToSqlClause(where);
 
   const row = this.connection
     .prepare(`SELECT doc FROM ${table} WHERE ${clause} LIMIT 1`)
