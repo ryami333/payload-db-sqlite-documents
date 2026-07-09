@@ -1,12 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-/**
- * Quote a SQLite identifier (e.g. a table name) so a collection slug that
- * happens to be a reserved word or contains unusual characters is handled
- * safely. Embedded double-quotes are doubled, per the SQL standard.
- */
-export const quoteIdentifier = (name: string): string =>
-  `"${name.replace(/"/g, '""')}"`;
+import { quoteSqliteIdentifier } from "./quoteSqliteIdentifier.js";
 
 /**
  * Lazily create the backing table for a collection and return its quoted name.
@@ -21,7 +15,7 @@ export const ensureCollectionTable = (
   connection: DatabaseSync,
   slug: string,
 ): string => {
-  const table = quoteIdentifier(slug);
+  const table = quoteSqliteIdentifier(slug);
   connection.exec(
     `CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, doc TEXT NOT NULL)`,
   );
