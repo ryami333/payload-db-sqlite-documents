@@ -91,17 +91,87 @@ describe("whereToSqlClause", () => {
     });
   });
 
-  it("throws on operators it does not understand yet", () => {
-    // The stubbed operators must fail loudly — silently ignoring `greater_than`
-    // would return wrong rows.
-    expect(() => whereToSqlClause({ views: { greater_than: 10 } })).toThrow(
-      'operator "greater_than" is not supported yet',
+  it("compares with not_equals as a NULL-safe inequality", () => {
+    // `IS NOT ?` (not `!= ?`) so a row missing the field still counts as
+    // "not equal", matching db-mongodb's $ne.
+    expect(whereToSqlClause({ status: { not_equals: "draft" } })).toEqual({
+      clause: "json_extract(doc, ?) IS NOT ?",
+      params: ["$.status", "draft"],
+    });
+  });
+
+  it("renders the ordering operators", () => {
+    expect(whereToSqlClause({ views: { greater_than: 10 } })).toEqual({
+      clause: "json_extract(doc, ?) > ?",
+      params: ["$.views", 10],
+    });
+    expect(whereToSqlClause({ views: { less_than_equal: 5 } })).toEqual({
+      clause: "json_extract(doc, ?) <= ?",
+      params: ["$.views", 5],
+    });
+  });
+
+  it("expands in to a bound placeholder list", () => {
+    expect(whereToSqlClause({ id: { in: ["a", "b", "c"] } })).toEqual({
+      clause: '"id" IN (?, ?, ?)',
+      params: ["a", "b", "c"],
+    });
+  });
+
+  it("accepts a comma-separated string for in", () => {
+    expect(whereToSqlClause({ id: { in: "a,b" } })).toEqual({
+      clause: '"id" IN (?, ?)',
+      params: ["a", "b"],
+    });
+  });
+
+  it("short-circuits empty in/not_in to constants (no dangling params)", () => {
+    // Neither references the column, so no json_extract path param leaks in.
+    expect(whereToSqlClause({ tags: { in: [] } })).toEqual({
+      clause: "0",
+      params: [],
+    });
+    expect(whereToSqlClause({ tags: { not_in: [] } })).toEqual({
+      clause: "1",
+      params: [],
+    });
+  });
+
+  it("renders exists as a null check without binding a value", () => {
+    expect(whereToSqlClause({ title: { exists: true } })).toEqual({
+      clause: "json_extract(doc, ?) IS NOT NULL",
+      params: ["$.title"],
+    });
+    expect(whereToSqlClause({ title: { exists: false } })).toEqual({
+      clause: "json_extract(doc, ?) IS NULL",
+      params: ["$.title"],
+    });
+  });
+
+  it("wraps contains/like values in substring wildcards", () => {
+    expect(whereToSqlClause({ title: { contains: "ell" } })).toEqual({
+      clause: "json_extract(doc, ?) LIKE ?",
+      params: ["$.title", "%ell%"],
+    });
+    expect(whereToSqlClause({ title: { not_like: "spam" } })).toEqual({
+      clause: "json_extract(doc, ?) NOT LIKE ?",
+      params: ["$.title", "%spam%"],
+    });
+  });
+
+  it("still throws on the array/geo operators it does not implement", () => {
+    // These must fail loudly rather than silently returning wrong rows.
+    expect(() => whereToSqlClause({ point: { near: [0, 0, 10] } })).toThrow(
+      'operator "near" is not supported yet',
+    );
+    expect(() => whereToSqlClause({ tags: { all: ["a"] } })).toThrow(
+      'operator "all" is not supported yet',
     );
   });
 
   it("throws on a query value it cannot bind", () => {
-    expect(() => whereToSqlClause({ tags: { equals: ["a", "b"] } })).toThrow(
-      "unsupported query value",
-    );
+    expect(() =>
+      whereToSqlClause({ tags: { greater_than: { nested: true } } }),
+    ).toThrow("unsupported query value");
   });
 });
