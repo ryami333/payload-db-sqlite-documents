@@ -1,3 +1,5 @@
+import { DatabaseSync } from "node:sqlite";
+
 import { createDatabaseAdapter, defaultBeginTransaction } from "payload";
 
 import type { BaseDatabaseAdapter, DatabaseAdapterObj, Payload } from "payload";
@@ -34,16 +36,25 @@ import { upsert } from "./handlers/upsert.js";
  * `migrationDir`, etc.) as those features come online.
  */
 export interface Args {
+  /**
+   * Where the SQLite database lives. Passed straight to `node:sqlite`'s
+   * `DatabaseSync`: a filesystem path (which — being a single file — can be
+   * source-controlled for local dev/preview), or `":memory:"` for an ephemeral
+   * database. Defaults to `":memory:"`.
+   */
+  filename?: string;
   /** Directory Payload reads/writes migration files from. */
   migrationDir?: string;
 }
 
 /**
- * The initialised adapter instance. Identical to {@link BaseDatabaseAdapter}
- * for now; adapter-specific state (the SQLite connection handle, prepared
- * statements, etc.) will be added here as methods are implemented.
+ * The initialised adapter instance: {@link BaseDatabaseAdapter} plus the live
+ * SQLite connection handle. Data-method handlers reach it via `this.connection`
+ * (Payload invokes them as methods on the adapter, so `this` is bound here).
  */
-export type SQLiteDocumentsAdapter = BaseDatabaseAdapter;
+export type SQLiteDocumentsAdapter = BaseDatabaseAdapter & {
+  connection: DatabaseSync;
+};
 
 /**
  * Create a Payload database adapter that persists data in SQLite using a
@@ -60,9 +71,10 @@ export const sqliteDocumentsAdapter = (
   args: Args = {},
 ): DatabaseAdapterObj<SQLiteDocumentsAdapter> => {
   function init({ payload }: { payload: Payload }): SQLiteDocumentsAdapter {
-    // TODO: open the SQLite connection handle here (driver TBD — likely
-    // better-sqlite3) once a data method needs it. While everything is a stub
-    // there is nothing to connect to.
+    // Open the SQLite connection via Node's built-in driver (`node:sqlite`,
+    // available on the Node versions this package targets). Handlers reach it
+    // through `this.connection`; tables are created lazily per collection.
+    const connection = new DatabaseSync(args.filename ?? ":memory:");
 
     return createDatabaseAdapter<SQLiteDocumentsAdapter>({
       name: "sqlite-documents",
@@ -70,6 +82,9 @@ export const sqliteDocumentsAdapter = (
 
       // Populated with the live instance by Payload core at init time.
       payload,
+
+      // The live SQLite handle, surfaced on the adapter for data methods.
+      connection,
 
       // Document/Mongo-style storage: default IDs are text, matching the
       // `@payloadcms/db-mongodb` adapter this targets as a local-dev stand-in.

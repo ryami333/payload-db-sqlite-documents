@@ -37,13 +37,60 @@ describe("sqliteDocumentsAdapter", () => {
     expect(typeof adapter.beginTransaction).toBe("function");
   });
 
-  it("stubs its data methods until they are implemented", () => {
+  it("stubs its not-yet-implemented data methods", () => {
     const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
 
     // The stubs ignore their arguments; the casts just satisfy the real method
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
     expect(() => adapter.find(anyArgs)).toThrow("not implemented yet");
-    expect(() => adapter.create(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.findOne(anyArgs)).toThrow("not implemented yet");
+  });
+
+  describe("create", () => {
+    it("inserts a document and returns it with a generated text id", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const doc = await adapter.create(
+        /** @type {any} */ ({ collection: "posts", data: { title: "Hello" } }),
+      );
+
+      expect(doc.title).toBe("Hello");
+      expect(typeof doc.id).toBe("string");
+      expect(doc.id.length).toBeGreaterThan(0);
+    });
+
+    it("honours a customID and round-trips the row through SQLite", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "fixed-id",
+          data: { title: "Pinned" },
+        }),
+      );
+
+      const row = /** @type {{ doc: string }} */ (
+        adapter.connection
+          .prepare('SELECT doc FROM "posts" WHERE id = ?')
+          .get("fixed-id")
+      );
+      expect(JSON.parse(row.doc)).toEqual({ id: "fixed-id", title: "Pinned" });
+    });
+
+    it("returns null when returning is false", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const result = await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "Quiet" },
+          returning: false,
+        }),
+      );
+
+      expect(result).toBeNull();
+    });
   });
 });
