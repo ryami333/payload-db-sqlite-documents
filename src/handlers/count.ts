@@ -7,11 +7,11 @@ import type { SQLiteDocumentsAdapter } from "../index.js";
 /**
  * Count the documents in a collection matching `where`.
  *
- * Reuses {@link whereToSqlClause} to compile the same parameterised clause the reads
- * use (currently `equals`/`and`/`or` only), then runs `COUNT(*)` over it.
- * Ensuring the table exists first means counting a never-written-to collection
- * returns `0` rather than throwing. This is also the count `find` will lean on
- * for its `totalDocs`/`totalPages` pagination metadata.
+ * Reuses {@link whereToSqlClause} to compile the same parameterised clause the
+ * reads use, then runs `COUNT(*)` over it. Ensuring the table exists first means
+ * counting a never-written-to collection returns `0` rather than throwing. This
+ * is also the count `find` leans on for its `totalDocs`/`totalPages` pagination
+ * metadata.
  *
  * Declared as a regular function (not an arrow) so Payload binds `this` to the
  * live adapter, exposing the connection handle opened in `init`.

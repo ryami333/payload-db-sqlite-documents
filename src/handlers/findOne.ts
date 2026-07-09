@@ -8,9 +8,9 @@ import type { SQLiteDocumentsAdapter } from "../index.js";
  * Fetch the first document in a collection matching `where`, or `null`.
  *
  * The stored JSON `doc` is read back and parsed; the `where` is compiled to a
- * parameterised clause by {@link whereToSqlClause} (currently `equals`/`and`/`or`
- * only). Ensuring the table exists first keeps a query against a
- * never-written-to collection from throwing — it simply finds nothing.
+ * parameterised clause by {@link whereToSqlClause}. Ensuring the table exists
+ * first keeps a query against a never-written-to collection from throwing — it
+ * simply finds nothing.
  *
  * Declared as a regular function (not an arrow) so Payload binds `this` to the
  * live adapter, exposing the connection handle opened in `init`.
