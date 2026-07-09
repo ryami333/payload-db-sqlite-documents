@@ -43,7 +43,7 @@ describe("sqliteDocumentsAdapter", () => {
     // The stubs ignore their arguments; the casts just satisfy the real method
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
-    expect(() => adapter.find(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.updateOne(anyArgs)).toThrow("not implemented yet");
     expect(() => adapter.deleteOne(anyArgs)).toThrow("not implemented yet");
   });
 
@@ -219,6 +219,148 @@ describe("sqliteDocumentsAdapter", () => {
       );
 
       expect(result).toEqual({ totalDocs: 2 });
+    });
+  });
+
+  describe("find", () => {
+    /**
+     * Seed a collection with `n` posts titled "Post 1".."Post n" and an
+     * incrementing `order` field, so sort/pagination assertions are meaningful.
+     *
+     * @param {ReturnType<ReturnType<typeof sqliteDocumentsAdapter>["init"]>} adapter
+     * @param {number} n
+     */
+    const seedPosts = async (adapter, n) => {
+      for (let i = 1; i <= n; i++) {
+        await adapter.create(
+          /** @type {any} */ ({
+            collection: "posts",
+            data: { title: `Post ${i}`, order: i },
+          }),
+        );
+      }
+    };
+
+    it("returns an empty, well-formed page for a collection with no docs", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const result = await adapter.find(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+
+      expect(result).toMatchObject({
+        docs: [],
+        totalDocs: 0,
+        totalPages: 1,
+        page: 1,
+        limit: 10,
+        hasPrevPage: false,
+        hasNextPage: false,
+        prevPage: null,
+        nextPage: null,
+        pagingCounter: 1,
+      });
+    });
+
+    it("returns all matching docs and the default limit of 10", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedPosts(adapter, 3);
+
+      const result = await adapter.find(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+
+      expect(result.docs).toHaveLength(3);
+      expect(result.totalDocs).toBe(3);
+      expect(result.limit).toBe(10);
+      expect(result.totalPages).toBe(1);
+    });
+
+    it("filters by where before counting and returning", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedPosts(adapter, 3);
+
+      const result = /** @type {any} */ (
+        await adapter.find(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { title: { equals: "Post 2" } },
+          }),
+        )
+      );
+
+      expect(result.docs).toHaveLength(1);
+      expect(result.totalDocs).toBe(1);
+      expect(result.docs[0].title).toBe("Post 2");
+    });
+
+    it("orders by a descending sort", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedPosts(adapter, 3);
+
+      const result = /** @type {any} */ (
+        await adapter.find(
+          /** @type {any} */ ({ collection: "posts", sort: "-order" }),
+        )
+      );
+
+      expect(result.docs.map((/** @type {any} */ d) => d.order)).toEqual([
+        3, 2, 1,
+      ]);
+    });
+
+    it("paginates with limit/page and reports the right metadata", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedPosts(adapter, 5);
+
+      const result = /** @type {any} */ (
+        await adapter.find(
+          /** @type {any} */ ({
+            collection: "posts",
+            limit: 2,
+            page: 2,
+            sort: "order",
+          }),
+        )
+      );
+
+      expect(result.docs.map((/** @type {any} */ d) => d.order)).toEqual([
+        3, 4,
+      ]);
+      expect(result).toMatchObject({
+        totalDocs: 5,
+        totalPages: 3,
+        page: 2,
+        limit: 2,
+        hasPrevPage: true,
+        hasNextPage: true,
+        prevPage: 1,
+        nextPage: 3,
+        pagingCounter: 3,
+      });
+    });
+
+    it("returns everything on one page when pagination is disabled", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedPosts(adapter, 5);
+
+      const result = await adapter.find(
+        /** @type {any} */ ({
+          collection: "posts",
+          pagination: false,
+          sort: "order",
+        }),
+      );
+
+      expect(result.docs).toHaveLength(5);
+      expect(result).toMatchObject({
+        totalDocs: 5,
+        totalPages: 1,
+        page: 1,
+        limit: 5,
+        hasNextPage: false,
+        hasPrevPage: false,
+      });
     });
   });
 });
