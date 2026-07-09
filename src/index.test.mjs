@@ -514,4 +514,228 @@ describe("sqliteDocumentsAdapter", () => {
       expect(result).toBeNull();
     });
   });
+
+  describe("query operators (end to end)", () => {
+    /**
+     * Seed three posts, one of which is missing `status`.
+     *
+     * @param {ReturnType<ReturnType<typeof sqliteDocumentsAdapter>["init"]>} adapter
+     */
+    const seed = async (adapter) => {
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "Alpha", views: 10, status: "published" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "Beta", views: 20, status: "draft" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "Gamma", views: 30 },
+        }),
+      );
+    };
+
+    /**
+     * Run find and return the matched titles, sorted for a stable assertion.
+     *
+     * @param {ReturnType<ReturnType<typeof sqliteDocumentsAdapter>["init"]>} adapter
+     * @param {import("payload").Where} where
+     */
+    const titlesMatching = async (adapter, where) => {
+      const result = /** @type {any} */ (
+        await adapter.find(
+          /** @type {any} */ ({ collection: "posts", where, sort: "title" }),
+        )
+      );
+      return result.docs.map((/** @type {any} */ d) => d.title);
+    };
+
+    it("greater_than filters numerically", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seed(adapter);
+
+      expect(
+        await titlesMatching(adapter, { views: { greater_than: 15 } }),
+      ).toEqual(["Beta", "Gamma"]);
+    });
+
+    it("in matches any of the listed values", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seed(adapter);
+
+      expect(
+        await titlesMatching(adapter, {
+          status: { in: ["published", "draft"] },
+        }),
+      ).toEqual(["Alpha", "Beta"]);
+    });
+
+    it("not_equals also matches rows missing the field (db-mongodb parity)", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seed(adapter);
+
+      // Gamma has no `status` at all, yet a NULL-safe `!=` still includes it.
+      expect(
+        await titlesMatching(adapter, { status: { not_equals: "draft" } }),
+      ).toEqual(["Alpha", "Gamma"]);
+    });
+
+    it("contains does a case-insensitive substring match", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seed(adapter);
+
+      expect(
+        await titlesMatching(adapter, { title: { contains: "ET" } }),
+      ).toEqual(["Beta"]);
+    });
+
+    it("exists distinguishes present from missing fields", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seed(adapter);
+
+      expect(
+        await titlesMatching(adapter, { status: { exists: true } }),
+      ).toEqual(["Alpha", "Beta"]);
+      expect(
+        await titlesMatching(adapter, { status: { exists: false } }),
+      ).toEqual(["Gamma"]);
+    });
+
+    it("composes operators through and/or", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seed(adapter);
+
+      expect(
+        await titlesMatching(adapter, {
+          and: [
+            { views: { greater_than_equal: 20 } },
+            { status: { exists: false } },
+          ],
+        }),
+      ).toEqual(["Gamma"]);
+    });
+  });
+
+  describe("updateMany", () => {
+    /**
+     * Seed `n` posts with an incrementing `order`, all `status: "old"`.
+     *
+     * @param {ReturnType<ReturnType<typeof sqliteDocumentsAdapter>["init"]>} adapter
+     * @param {number} n
+     */
+    const seedOld = async (adapter, n) => {
+      for (let i = 1; i <= n; i++) {
+        await adapter.create(
+          /** @type {any} */ ({
+            collection: "posts",
+            data: { title: `Post ${i}`, order: i, status: "old" },
+          }),
+        );
+      }
+    };
+
+    it("updates every matching doc and returns the merged results", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedOld(adapter, 3);
+
+      const updated = /** @type {any} */ (
+        await adapter.updateMany(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { status: { equals: "old" } },
+            data: { status: "new" },
+          }),
+        )
+      );
+
+      expect(updated).toHaveLength(3);
+      // status overwritten, order (absent from data) preserved by the merge.
+      expect(updated.every((/** @type {any} */ d) => d.status === "new")).toBe(
+        true,
+      );
+      expect(
+        updated
+          .map((/** @type {any} */ d) => d.order)
+          .sort((/** @type {number} */ a, /** @type {number} */ b) => a - b),
+      ).toEqual([1, 2, 3]);
+    });
+
+    it("caps the update at limit, ordered by sort, leaving the rest", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedOld(adapter, 4);
+
+      const updated = /** @type {any} */ (
+        await adapter.updateMany(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { status: { equals: "old" } },
+            sort: "order",
+            limit: 2,
+            data: { status: "new" },
+          }),
+        )
+      );
+
+      expect(updated.map((/** @type {any} */ d) => d.order)).toEqual([1, 2]);
+
+      // The unpicked rows must still be "old".
+      const stillOld = /** @type {any} */ (
+        await adapter.find(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { status: { equals: "old" } },
+            sort: "order",
+          }),
+        )
+      );
+      expect(stillOld.docs.map((/** @type {any} */ d) => d.order)).toEqual([
+        3, 4,
+      ]);
+    });
+
+    it("returns null (but still writes) when returning is false", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedOld(adapter, 2);
+
+      const result = await adapter.updateMany(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { status: { equals: "old" } },
+          data: { status: "new" },
+          returning: false,
+        }),
+      );
+      expect(result).toBeNull();
+
+      const { totalDocs } = await adapter.count(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { status: { equals: "new" } },
+        }),
+      );
+      expect(totalDocs).toBe(2);
+    });
+
+    it("returns an empty array when nothing matches", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seedOld(adapter, 2);
+
+      const result = await adapter.updateMany(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { status: { equals: "missing" } },
+          data: { status: "new" },
+        }),
+      );
+
+      expect(result).toEqual([]);
+    });
+  });
 });
