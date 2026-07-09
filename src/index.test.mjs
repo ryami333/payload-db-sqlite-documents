@@ -43,8 +43,8 @@ describe("sqliteDocumentsAdapter", () => {
     // The stubs ignore their arguments; the casts just satisfy the real method
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
-    expect(() => adapter.deleteMany(anyArgs)).toThrow("not implemented yet");
-    expect(() => adapter.deleteOne(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.upsert(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.findDistinct(anyArgs)).toThrow("not implemented yet");
   });
 
   describe("create", () => {
@@ -736,6 +736,154 @@ describe("sqliteDocumentsAdapter", () => {
       );
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe("deleteOne", () => {
+    it("deletes the matching doc, returns it, and removes it from the table", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "gone",
+          data: { title: "Doomed" },
+        }),
+      );
+
+      const deleted = await adapter.deleteOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "gone" } },
+        }),
+      );
+
+      expect(deleted).toEqual({ id: "gone", title: "Doomed" });
+
+      const found = await adapter.findOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "gone" } },
+        }),
+      );
+      expect(found).toBeNull();
+    });
+
+    it("deletes only one row even when several match", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "A", status: "draft" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "B", status: "draft" },
+        }),
+      );
+
+      await adapter.deleteOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { status: { equals: "draft" } },
+        }),
+      );
+
+      const { totalDocs } = await adapter.count(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+      expect(totalDocs).toBe(1);
+    });
+
+    it("returns null when nothing matches", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const result = await adapter.deleteOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "missing" } },
+        }),
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it("returns null (but still deletes) when returning is false", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "gone",
+          data: { title: "Doomed" },
+        }),
+      );
+
+      const result = await adapter.deleteOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "gone" } },
+          returning: false,
+        }),
+      );
+      expect(result).toBeNull();
+
+      const { totalDocs } = await adapter.count(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+      expect(totalDocs).toBe(0);
+    });
+  });
+
+  describe("deleteMany", () => {
+    it("deletes every matching doc and leaves the rest", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "A", status: "draft" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "B", status: "draft" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "C", status: "published" },
+        }),
+      );
+
+      const result = await adapter.deleteMany(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { status: { equals: "draft" } },
+        }),
+      );
+      expect(result).toBeUndefined();
+
+      const remaining = /** @type {any} */ (
+        await adapter.find(/** @type {any} */ ({ collection: "posts" }))
+      );
+      expect(remaining.docs.map((/** @type {any} */ d) => d.title)).toEqual([
+        "C",
+      ]);
+    });
+
+    it("does not throw on a never-written-to collection", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await expect(
+        adapter.deleteMany(
+          /** @type {any} */ ({
+            collection: "untouched",
+            where: { status: { equals: "draft" } },
+          }),
+        ),
+      ).resolves.toBeUndefined();
     });
   });
 });
