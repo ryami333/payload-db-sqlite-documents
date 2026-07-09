@@ -21,7 +21,10 @@ export const create: Create = async function create(
   this: SQLiteDocumentsAdapter,
   { collection, customID, data, returning },
 ) {
-  const table = ensureCollectionTable(this.connection, collection);
+  const table = ensureCollectionTable({
+    connection: this.connection,
+    slug: collection,
+  });
 
   const dataId =
     typeof data.id === "number" || typeof data.id === "string"

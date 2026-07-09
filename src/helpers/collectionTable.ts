@@ -11,10 +11,13 @@ import { quoteSqliteIdentifier } from "./quoteSqliteIdentifier.js";
  * in `doc`. Creating on demand keeps `init` cheap and means the file only ever
  * contains tables for collections that have actually been written to.
  */
-export const ensureCollectionTable = (
-  connection: DatabaseSync,
-  slug: string,
-): string => {
+export const ensureCollectionTable = ({
+  connection,
+  slug,
+}: {
+  connection: DatabaseSync;
+  slug: string;
+}): string => {
   const table = quoteSqliteIdentifier(slug);
   connection.exec(
     `CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, doc TEXT NOT NULL)`,
