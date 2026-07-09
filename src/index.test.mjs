@@ -43,7 +43,7 @@ describe("sqliteDocumentsAdapter", () => {
     // The stubs ignore their arguments; the casts just satisfy the real method
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
-    expect(() => adapter.updateOne(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.deleteMany(anyArgs)).toThrow("not implemented yet");
     expect(() => adapter.deleteOne(anyArgs)).toThrow("not implemented yet");
   });
 
@@ -361,6 +361,157 @@ describe("sqliteDocumentsAdapter", () => {
         hasNextPage: false,
         hasPrevPage: false,
       });
+    });
+  });
+
+  describe("updateOne", () => {
+    it("updates a document located by id and returns the merged doc", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "fixed-id",
+          data: { title: "Old", status: "draft" },
+        }),
+      );
+
+      const updated = await adapter.updateOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          id: "fixed-id",
+          data: { title: "New" },
+        }),
+      );
+
+      // `title` overwritten, `status` (absent from data) preserved by the merge,
+      // id pinned.
+      expect(updated).toEqual({
+        id: "fixed-id",
+        title: "New",
+        status: "draft",
+      });
+    });
+
+    it("persists the change so a subsequent read sees it", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "fixed-id",
+          data: { title: "Old" },
+        }),
+      );
+      await adapter.updateOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          id: "fixed-id",
+          data: { title: "New" },
+        }),
+      );
+
+      const found = await adapter.findOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "fixed-id" } },
+        }),
+      );
+      expect(found).toEqual({ id: "fixed-id", title: "New" });
+    });
+
+    it("locates the target by a where query", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "Findable", status: "draft" },
+        }),
+      );
+
+      const updated = /** @type {any} */ (
+        await adapter.updateOne(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { title: { equals: "Findable" } },
+            data: { status: "published" },
+          }),
+        )
+      );
+
+      expect(updated.status).toBe("published");
+      expect(updated.title).toBe("Findable");
+    });
+
+    it("cannot reassign the id, even if data carries a different one", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "real-id",
+          data: { title: "Old" },
+        }),
+      );
+
+      const updated = /** @type {any} */ (
+        await adapter.updateOne(
+          /** @type {any} */ ({
+            collection: "posts",
+            id: "real-id",
+            data: { id: "spoofed-id", title: "New" },
+          }),
+        )
+      );
+
+      expect(updated.id).toBe("real-id");
+    });
+
+    it("returns null (but still writes) when returning is false", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "fixed-id",
+          data: { title: "Old" },
+        }),
+      );
+
+      const result = await adapter.updateOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          id: "fixed-id",
+          data: { title: "New" },
+          returning: false,
+        }),
+      );
+      expect(result).toBeNull();
+
+      const found = /** @type {any} */ (
+        await adapter.findOne(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { id: { equals: "fixed-id" } },
+          }),
+        )
+      );
+      expect(found.title).toBe("New");
+    });
+
+    it("returns null when nothing matches", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const result = await adapter.updateOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          id: "missing",
+          data: { title: "New" },
+        }),
+      );
+
+      expect(result).toBeNull();
     });
   });
 });
