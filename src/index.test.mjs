@@ -44,7 +44,7 @@ describe("sqliteDocumentsAdapter", () => {
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
     expect(() => adapter.find(anyArgs)).toThrow("not implemented yet");
-    expect(() => adapter.count(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.deleteOne(anyArgs)).toThrow("not implemented yet");
   });
 
   describe("create", () => {
@@ -157,6 +157,68 @@ describe("sqliteDocumentsAdapter", () => {
       );
 
       expect(found).toBeNull();
+    });
+  });
+
+  describe("count", () => {
+    it("returns 0 for a collection that has never been written to", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      // Must not throw on the lazily-created (empty) table.
+      const result = await adapter.count(
+        /** @type {any} */ ({ collection: "untouched" }),
+      );
+
+      expect(result).toEqual({ totalDocs: 0 });
+    });
+
+    it("counts every document when no where is given", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({ collection: "posts", data: { title: "A" } }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({ collection: "posts", data: { title: "B" } }),
+      );
+
+      const result = await adapter.count(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+
+      expect(result).toEqual({ totalDocs: 2 });
+    });
+
+    it("counts only the documents matching a where filter", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "A", status: "published" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "B", status: "draft" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "C", status: "published" },
+        }),
+      );
+
+      const result = await adapter.count(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { status: { equals: "published" } },
+        }),
+      );
+
+      expect(result).toEqual({ totalDocs: 2 });
     });
   });
 });
