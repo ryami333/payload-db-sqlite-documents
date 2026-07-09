@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Create } from "payload";
 
-import { ensureCollectionTable } from "../helpers/collectionTable.js";
+import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
