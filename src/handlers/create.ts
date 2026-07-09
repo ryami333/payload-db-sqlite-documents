@@ -23,8 +23,12 @@ export const create: Create = async function create(
 ) {
   const table = ensureCollectionTable(this.connection, collection);
 
-  const id =
-    customID ?? (data.id as number | string | undefined) ?? randomUUID();
+  const dataId =
+    typeof data.id === "number" || typeof data.id === "string"
+      ? data.id
+      : undefined;
+
+  const id = customID ?? dataId ?? randomUUID();
   const doc = { ...data, id };
 
   this.connection
