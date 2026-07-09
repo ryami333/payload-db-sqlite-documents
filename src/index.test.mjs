@@ -43,7 +43,7 @@ describe("sqliteDocumentsAdapter", () => {
     // The stubs ignore their arguments; the casts just satisfy the real method
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
-    expect(() => adapter.upsert(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.createGlobal(anyArgs)).toThrow("not implemented yet");
     expect(() => adapter.findDistinct(anyArgs)).toThrow("not implemented yet");
   });
 
@@ -884,6 +884,113 @@ describe("sqliteDocumentsAdapter", () => {
           }),
         ),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe("upsert", () => {
+    it("creates a new doc when nothing matches", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const result = /** @type {any} */ (
+        await adapter.upsert(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { slug: { equals: "hello" } },
+            data: { slug: "hello", title: "Hello" },
+          }),
+        )
+      );
+
+      expect(result.title).toBe("Hello");
+      expect(typeof result.id).toBe("string");
+
+      const { totalDocs } = await adapter.count(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+      expect(totalDocs).toBe(1);
+    });
+
+    it("updates the matching doc instead of creating a second", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "fixed-id",
+          data: { slug: "hello", title: "Old", status: "draft" },
+        }),
+      );
+
+      const result = /** @type {any} */ (
+        await adapter.upsert(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { slug: { equals: "hello" } },
+            data: { title: "New" },
+          }),
+        )
+      );
+
+      // Same row (id preserved), title overwritten, status kept by the merge.
+      expect(result).toEqual({
+        id: "fixed-id",
+        slug: "hello",
+        title: "New",
+        status: "draft",
+      });
+
+      const { totalDocs } = await adapter.count(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+      expect(totalDocs).toBe(1);
+    });
+
+    it("returns null (but still writes) when returning is false — update path", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { slug: "hello", title: "Old" },
+        }),
+      );
+
+      const result = await adapter.upsert(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { slug: { equals: "hello" } },
+          data: { title: "New" },
+          returning: false,
+        }),
+      );
+      expect(result).toBeNull();
+
+      const found = /** @type {any} */ (
+        await adapter.findOne(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { slug: { equals: "hello" } },
+          }),
+        )
+      );
+      expect(found.title).toBe("New");
+    });
+
+    it("returns null (but still writes) when returning is false — create path", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const result = await adapter.upsert(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { slug: { equals: "hello" } },
+          data: { slug: "hello", title: "Hello" },
+          returning: false,
+        }),
+      );
+      expect(result).toBeNull();
+
+      const { totalDocs } = await adapter.count(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+      expect(totalDocs).toBe(1);
     });
   });
 });
