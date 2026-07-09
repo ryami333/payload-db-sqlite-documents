@@ -43,8 +43,8 @@ describe("sqliteDocumentsAdapter", () => {
     // The stubs ignore their arguments; the casts just satisfy the real method
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
-    expect(() => adapter.createGlobal(anyArgs)).toThrow("not implemented yet");
-    expect(() => adapter.findGlobal(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.queryDrafts(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.findVersions(anyArgs)).toThrow("not implemented yet");
   });
 
   describe("create", () => {
@@ -1146,6 +1146,140 @@ describe("sqliteDocumentsAdapter", () => {
 
       expect(result.values).toEqual([]);
       expect(result).toMatchObject({ totalDocs: 0, totalPages: 1, page: 1 });
+    });
+  });
+
+  describe("globals", () => {
+    it("creates a global with a generated id and reads it back", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const created = /** @type {any} */ (
+        await adapter.createGlobal(
+          /** @type {any} */ ({
+            slug: "settings",
+            data: { title: "Site", theme: "dark" },
+          }),
+        )
+      );
+
+      expect(created.title).toBe("Site");
+      expect(typeof created.id).toBe("string");
+
+      const found = /** @type {any} */ (
+        await adapter.findGlobal(/** @type {any} */ ({ slug: "settings" }))
+      );
+      expect(found).toEqual(created);
+    });
+
+    it("returns null for a global that has never been created", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const found = await adapter.findGlobal(
+        /** @type {any} */ ({ slug: "settings" }),
+      );
+
+      expect(found).toBeNull();
+    });
+
+    it("keeps globals of different slugs separate", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.createGlobal(
+        /** @type {any} */ ({ slug: "a", data: { title: "A" } }),
+      );
+      await adapter.createGlobal(
+        /** @type {any} */ ({ slug: "b", data: { title: "B" } }),
+      );
+
+      const a = /** @type {any} */ (
+        await adapter.findGlobal(/** @type {any} */ ({ slug: "a" }))
+      );
+      const b = /** @type {any} */ (
+        await adapter.findGlobal(/** @type {any} */ ({ slug: "b" }))
+      );
+      expect([a.title, b.title]).toEqual(["A", "B"]);
+    });
+
+    it("updates an existing global, merging and preserving its id", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      const created = /** @type {any} */ (
+        await adapter.createGlobal(
+          /** @type {any} */ ({
+            slug: "settings",
+            data: { title: "Old", theme: "dark" },
+          }),
+        )
+      );
+
+      const updated = /** @type {any} */ (
+        await adapter.updateGlobal(
+          /** @type {any} */ ({ slug: "settings", data: { title: "New" } }),
+        )
+      );
+
+      // title overwritten, theme kept by the merge, id unchanged.
+      expect(updated).toEqual({ id: created.id, title: "New", theme: "dark" });
+    });
+
+    it("upserts when updating a global that was never created", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const updated = /** @type {any} */ (
+        await adapter.updateGlobal(
+          /** @type {any} */ ({ slug: "settings", data: { title: "Fresh" } }),
+        )
+      );
+
+      expect(updated.title).toBe("Fresh");
+      expect(typeof updated.id).toBe("string");
+
+      const found = /** @type {any} */ (
+        await adapter.findGlobal(/** @type {any} */ ({ slug: "settings" }))
+      );
+      expect(found).toEqual(updated);
+    });
+
+    it("filters findGlobal by a where clause", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.createGlobal(
+        /** @type {any} */ ({
+          slug: "settings",
+          data: { title: "Site", theme: "dark" },
+        }),
+      );
+
+      const match = await adapter.findGlobal(
+        /** @type {any} */ ({
+          slug: "settings",
+          where: { theme: { equals: "dark" } },
+        }),
+      );
+      expect(match).not.toBeNull();
+
+      const miss = await adapter.findGlobal(
+        /** @type {any} */ ({
+          slug: "settings",
+          where: { theme: { equals: "light" } },
+        }),
+      );
+      expect(miss).toBeNull();
+    });
+
+    it("returns null (but still writes) when returning is false", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const result = await adapter.createGlobal(
+        /** @type {any} */ ({
+          slug: "settings",
+          data: { title: "Quiet" },
+          returning: false,
+        }),
+      );
+      expect(result).toBeNull();
+
+      const found = /** @type {any} */ (
+        await adapter.findGlobal(/** @type {any} */ ({ slug: "settings" }))
+      );
+      expect(found.title).toBe("Quiet");
     });
   });
 });
