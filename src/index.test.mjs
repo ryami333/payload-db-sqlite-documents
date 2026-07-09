@@ -43,8 +43,12 @@ describe("sqliteDocumentsAdapter", () => {
     // The stubs ignore their arguments; the casts just satisfy the real method
     // signatures under checkJs until the implementations land.
     const anyArgs = /** @type {any} */ ({});
-    expect(() => adapter.queryDrafts(anyArgs)).toThrow("not implemented yet");
-    expect(() => adapter.findVersions(anyArgs)).toThrow("not implemented yet");
+    expect(() => adapter.createGlobalVersion(anyArgs)).toThrow(
+      "not implemented yet",
+    );
+    expect(() => adapter.findGlobalVersions(anyArgs)).toThrow(
+      "not implemented yet",
+    );
   });
 
   describe("create", () => {
@@ -1280,6 +1284,214 @@ describe("sqliteDocumentsAdapter", () => {
         await adapter.findGlobal(/** @type {any} */ ({ slug: "settings" }))
       );
       expect(found.title).toBe("Quiet");
+    });
+  });
+
+  describe("versions", () => {
+    /**
+     * Build createVersion args with sensible defaults.
+     *
+     * @param {Record<string, any>} [overrides]
+     */
+    const versionArgs = (overrides = {}) => ({
+      collectionSlug: "posts",
+      parent: "p1",
+      autosave: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      versionData: { title: "V1", _status: "draft" },
+      ...overrides,
+    });
+
+    it("creates a version as latest and reads it back", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const created = /** @type {any} */ (
+        await adapter.createVersion(/** @type {any} */ (versionArgs()))
+      );
+
+      expect(created.parent).toBe("p1");
+      expect(created.latest).toBe(true);
+      expect(created.version).toEqual({ title: "V1", _status: "draft" });
+      expect(typeof created.id).toBe("string");
+
+      const found = /** @type {any} */ (
+        await adapter.findVersions(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { parent: { equals: "p1" } },
+          }),
+        )
+      );
+      expect(found.totalDocs).toBe(1);
+      expect(found.docs[0].id).toBe(created.id);
+    });
+
+    it("moves the latest flag to the newest version of a parent", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.createVersion(
+        /** @type {any} */ (versionArgs({ versionData: { title: "V1" } })),
+      );
+      const v2 = /** @type {any} */ (
+        await adapter.createVersion(
+          /** @type {any} */ (
+            versionArgs({
+              versionData: { title: "V2" },
+              updatedAt: "2026-01-02T00:00:00.000Z",
+            })
+          ),
+        )
+      );
+
+      const latest = /** @type {any} */ (
+        await adapter.findVersions(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { latest: { equals: true } },
+          }),
+        )
+      );
+      expect(latest.docs).toHaveLength(1);
+      expect(latest.docs[0].id).toBe(v2.id);
+      expect(latest.docs[0].version.title).toBe("V2");
+    });
+
+    it("scopes findVersions and countVersions to the collection", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.createVersion(/** @type {any} */ (versionArgs()));
+      await adapter.createVersion(
+        /** @type {any} */ (versionArgs({ parent: "p2" })),
+      );
+      await adapter.createVersion(
+        /** @type {any} */ (
+          versionArgs({ collectionSlug: "pages", parent: "p3" })
+        ),
+      );
+
+      const found = /** @type {any} */ (
+        await adapter.findVersions(/** @type {any} */ ({ collection: "posts" }))
+      );
+      expect(found.totalDocs).toBe(2);
+
+      const { totalDocs } = await adapter.countVersions(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+      expect(totalDocs).toBe(2);
+    });
+
+    it("updates a version by id, merging versionData and pinning id", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      const created = /** @type {any} */ (
+        await adapter.createVersion(
+          /** @type {any} */ (versionArgs({ versionData: { title: "Old" } })),
+        )
+      );
+
+      const updated = /** @type {any} */ (
+        await adapter.updateVersion(
+          /** @type {any} */ ({
+            collection: "posts",
+            id: created.id,
+            versionData: { version: { title: "New" }, latest: false },
+          }),
+        )
+      );
+
+      expect(updated.id).toBe(created.id);
+      expect(updated.version).toEqual({ title: "New" });
+      expect(updated.latest).toBe(false);
+      // parent wasn't in versionData, so the merge preserved it.
+      expect(updated.parent).toBe("p1");
+    });
+
+    it("deletes versions matching a where clause", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.createVersion(/** @type {any} */ (versionArgs()));
+      await adapter.createVersion(
+        /** @type {any} */ (versionArgs({ parent: "p2" })),
+      );
+
+      const result = await adapter.deleteVersions(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { parent: { equals: "p1" } },
+        }),
+      );
+      expect(result).toBeUndefined();
+
+      const { totalDocs } = await adapter.countVersions(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+      expect(totalDocs).toBe(1);
+    });
+
+    describe("queryDrafts", () => {
+      it("returns the latest version per parent, unwrapped to documents", async () => {
+        const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+        await adapter.createVersion(
+          /** @type {any} */ (
+            versionArgs({ parent: "p1", versionData: { title: "P1-old" } })
+          ),
+        );
+        await adapter.createVersion(
+          /** @type {any} */ (
+            versionArgs({
+              parent: "p1",
+              versionData: { title: "P1-new" },
+              updatedAt: "2026-01-02T00:00:00.000Z",
+            })
+          ),
+        );
+        await adapter.createVersion(
+          /** @type {any} */ (
+            versionArgs({ parent: "p2", versionData: { title: "P2" } })
+          ),
+        );
+
+        const result = /** @type {any} */ (
+          await adapter.queryDrafts(
+            /** @type {any} */ ({ collection: "posts" }),
+          )
+        );
+
+        expect(result.totalDocs).toBe(2);
+        // Each doc is the version snapshot with id set back to the parent.
+        expect(
+          result.docs.map((/** @type {any} */ d) => [d.id, d.title]).sort(),
+        ).toEqual([
+          ["p1", "P1-new"],
+          ["p2", "P2"],
+        ]);
+      });
+
+      it("applies a version-prefixed where filter", async () => {
+        const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+        await adapter.createVersion(
+          /** @type {any} */ (
+            versionArgs({ parent: "p1", versionData: { title: "Keep" } })
+          ),
+        );
+        await adapter.createVersion(
+          /** @type {any} */ (
+            versionArgs({ parent: "p2", versionData: { title: "Drop" } })
+          ),
+        );
+
+        const result = /** @type {any} */ (
+          await adapter.queryDrafts(
+            /** @type {any} */ ({
+              collection: "posts",
+              where: { "version.title": { equals: "Keep" } },
+            }),
+          )
+        );
+
+        expect(result.docs.map((/** @type {any} */ d) => d.id)).toEqual(["p1"]);
+      });
     });
   });
 });
