@@ -37,20 +37,6 @@ describe("sqliteDocumentsAdapter", () => {
     expect(typeof adapter.beginTransaction).toBe("function");
   });
 
-  it("stubs its not-yet-implemented data methods", () => {
-    const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
-
-    // The stubs ignore their arguments; the casts just satisfy the real method
-    // signatures under checkJs until the implementations land.
-    const anyArgs = /** @type {any} */ ({});
-    expect(() => adapter.createGlobalVersion(anyArgs)).toThrow(
-      "not implemented yet",
-    );
-    expect(() => adapter.findGlobalVersions(anyArgs)).toThrow(
-      "not implemented yet",
-    );
-  });
-
   describe("create", () => {
     it("inserts a document and returns it with a generated text id", async () => {
       const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
@@ -1492,6 +1478,147 @@ describe("sqliteDocumentsAdapter", () => {
 
         expect(result.docs.map((/** @type {any} */ d) => d.id)).toEqual(["p1"]);
       });
+    });
+  });
+
+  describe("global versions", () => {
+    /**
+     * Build createGlobalVersion args with sensible defaults.
+     *
+     * @param {Record<string, any>} [overrides]
+     */
+    const globalVersionArgs = (overrides = {}) => ({
+      globalSlug: "settings",
+      autosave: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      versionData: { title: "V1" },
+      ...overrides,
+    });
+
+    it("creates a global version (no parent) as latest and reads it back", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const created = /** @type {any} */ (
+        await adapter.createGlobalVersion(
+          /** @type {any} */ (globalVersionArgs()),
+        )
+      );
+
+      expect(created.latest).toBe(true);
+      expect(created.version).toEqual({ title: "V1" });
+      expect("parent" in created).toBe(false);
+      expect(typeof created.id).toBe("string");
+
+      const found = /** @type {any} */ (
+        await adapter.findGlobalVersions(
+          /** @type {any} */ ({ global: "settings" }),
+        )
+      );
+      expect(found.totalDocs).toBe(1);
+      expect(found.docs[0].id).toBe(created.id);
+    });
+
+    it("moves the latest flag to the newest version of the global", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.createGlobalVersion(
+        /** @type {any} */ (
+          globalVersionArgs({ versionData: { title: "V1" } })
+        ),
+      );
+      const v2 = /** @type {any} */ (
+        await adapter.createGlobalVersion(
+          /** @type {any} */ (
+            globalVersionArgs({
+              versionData: { title: "V2" },
+              updatedAt: "2026-01-02T00:00:00.000Z",
+            })
+          ),
+        )
+      );
+
+      const latest = /** @type {any} */ (
+        await adapter.findGlobalVersions(
+          /** @type {any} */ ({
+            global: "settings",
+            where: { latest: { equals: true } },
+          }),
+        )
+      );
+      expect(latest.docs).toHaveLength(1);
+      expect(latest.docs[0].id).toBe(v2.id);
+    });
+
+    it("scopes findGlobalVersions and countGlobalVersions by global slug", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.createGlobalVersion(
+        /** @type {any} */ (globalVersionArgs({ globalSlug: "settings" })),
+      );
+      await adapter.createGlobalVersion(
+        /** @type {any} */ (globalVersionArgs({ globalSlug: "nav" })),
+      );
+
+      const found = /** @type {any} */ (
+        await adapter.findGlobalVersions(
+          /** @type {any} */ ({ global: "settings" }),
+        )
+      );
+      expect(found.totalDocs).toBe(1);
+
+      const { totalDocs } = await adapter.countGlobalVersions(
+        /** @type {any} */ ({ global: "settings" }),
+      );
+      expect(totalDocs).toBe(1);
+    });
+
+    it("updates a global version by id, merging and pinning id", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      const created = /** @type {any} */ (
+        await adapter.createGlobalVersion(
+          /** @type {any} */ (
+            globalVersionArgs({ versionData: { title: "Old" } })
+          ),
+        )
+      );
+
+      const updated = /** @type {any} */ (
+        await adapter.updateGlobalVersion(
+          /** @type {any} */ ({
+            global: "settings",
+            id: created.id,
+            versionData: { version: { title: "New" }, latest: false },
+          }),
+        )
+      );
+
+      expect(updated.id).toBe(created.id);
+      expect(updated.version).toEqual({ title: "New" });
+      expect(updated.latest).toBe(false);
+    });
+
+    it("deleteVersions removes global versions by global slug", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.createGlobalVersion(
+        /** @type {any} */ (globalVersionArgs({ globalSlug: "settings" })),
+      );
+      await adapter.createGlobalVersion(
+        /** @type {any} */ (globalVersionArgs({ globalSlug: "nav" })),
+      );
+
+      await adapter.deleteVersions(
+        /** @type {any} */ ({ globalSlug: "settings", where: {} }),
+      );
+
+      const settings = await adapter.countGlobalVersions(
+        /** @type {any} */ ({ global: "settings" }),
+      );
+      const nav = await adapter.countGlobalVersions(
+        /** @type {any} */ ({ global: "nav" }),
+      );
+      expect(settings.totalDocs).toBe(0);
+      expect(nav.totalDocs).toBe(1);
     });
   });
 });
