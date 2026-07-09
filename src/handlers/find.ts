@@ -47,12 +47,17 @@ export const find: Find = async function find(
 
   const { clause: orderBy, params: orderParams } = sortToSqlClause(sort);
 
-  let sql = `SELECT doc FROM ${table} WHERE ${clause} ORDER BY ${orderBy}`;
-  const queryParams = [...params, ...orderParams];
-  if (paginated) {
-    sql += ` LIMIT ? OFFSET ?`;
-    queryParams.push(requestedLimit, (currentPage - 1) * requestedLimit);
-  }
+  // Keep the LIMIT/OFFSET fragment's SQL and its params together so they can't
+  // drift out of sync; an empty fragment when unpaginated composes to nothing.
+  const limitClause = paginated
+    ? {
+        sql: " LIMIT ? OFFSET ?",
+        params: [requestedLimit, (currentPage - 1) * requestedLimit],
+      }
+    : { sql: "", params: [] };
+
+  const sql = `SELECT doc FROM ${table} WHERE ${clause} ORDER BY ${orderBy}${limitClause.sql}`;
+  const queryParams = [...params, ...orderParams, ...limitClause.params];
 
   const rows = this.connection.prepare(sql).all(...queryParams);
   // Each `doc` is a string we wrote; narrow rather than trust the loose SQLite
