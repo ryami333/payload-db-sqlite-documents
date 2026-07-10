@@ -1,0 +1,27 @@
+{
+  "name": "payload-db-sqlite-documents-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "yarn@4.17.1",
+  "engines": {
+    "node": "^22 || ^24 || ^26"
+  },
+  "workspaces": [
+    "packages/*",
+    "sandbox"
+  ],
+  "devDependencies": {
+    "prettier": "^3.9.5"
+  },
+  "scripts": {
+    "build": "yarn workspace payload-db-sqlite-documents build",
+    "test": "yarn workspace payload-db-sqlite-documents test",
+    "test:watch": "yarn workspace payload-db-sqlite-documents test:watch",
+    "lint": "yarn workspace payload-db-sqlite-documents lint",
+    "tsc": "yarn workspace payload-db-sqlite-documents tsc",
+    "release": "yarn workspace payload-db-sqlite-documents release",
+    "sandbox": "yarn workspace sandbox dev",
+    "sandbox:build": "yarn workspace sandbox build"
+  }
+}

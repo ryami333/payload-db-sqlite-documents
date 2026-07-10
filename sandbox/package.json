@@ -1,0 +1,29 @@
+{
+  "name": "sandbox",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "generate:importmap": "payload generate:importmap",
+    "generate:types": "payload generate:types"
+  },
+  "dependencies": {
+    "@payloadcms/next": "^3.85.2",
+    "@payloadcms/richtext-lexical": "^3.85.2",
+    "graphql": "^16.11.0",
+    "next": "~15.4.11",
+    "payload": "^3.85.2",
+    "payload-db-sqlite-documents": "workspace:*",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,4 @@
+# Payload-generated files — their formatting is owned by `payload generate:*`,
+# not Prettier, so don't fight the generator over them.
+sandbox/src/app/(payload)/admin/importMap.js
+sandbox/src/payload-types.ts
