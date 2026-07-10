@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import type { Sort, Where } from "payload";
+import type { JsonObject, Sort, TypeWithVersion, Where } from "payload";
 
 import type { PaginationMeta } from "./buildPaginationMeta.js";
 import { buildPaginationMeta } from "./buildPaginationMeta.js";
@@ -18,10 +18,11 @@ import { whereToSqlFragment } from "./whereToSqlFragment.js";
  * `global_slug`) — they differ only in which scope column is filtered, so it's
  * passed in. Combines {@link whereToSqlFragment}, {@link sortToSqlFragment} and
  * {@link buildPaginationMeta} the same way {@link import("../handlers/find.js").find}
- * does for collection documents; `docs` are the parsed `TypeWithVersion` records
- * (typed loosely here since they come straight from `JSON.parse`).
+ * does for collection documents; generic over `T` the same way Payload's
+ * `FindVersions`/`FindGlobalVersions` are, so callers get back `TypeWithVersion<T>`
+ * instead of loosely-typed `JSON.parse` output.
  */
-export const readVersionsPage = ({
+export const readVersionsPage = <T = JsonObject>({
   connection,
   limit,
   page,
@@ -39,7 +40,7 @@ export const readVersionsPage = ({
   scopeValue: string;
   sort?: Sort;
   where?: Where;
-}): { docs: any[]; meta: PaginationMeta } => {
+}): { docs: TypeWithVersion<T>[]; meta: PaginationMeta } => {
   const table = ensureVersionsTable({ connection });
 
   const whereFragment = whereToSqlFragment(where);
@@ -70,7 +71,9 @@ export const readVersionsPage = ({
     .all(...scopedParams, ...sortFragment.params, ...limitFragment.params);
 
   const docs = rows.flatMap((row) =>
-    typeof row.doc === "string" ? [JSON.parse(row.doc)] : [],
+    typeof row.doc === "string"
+      ? [JSON.parse(row.doc) as TypeWithVersion<T>]
+      : [],
   );
 
   return { docs, meta };

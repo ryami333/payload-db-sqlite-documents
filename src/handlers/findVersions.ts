@@ -1,4 +1,4 @@
-import type { FindVersions } from "payload";
+import type { FindVersions, FindVersionsArgs, JsonObject } from "payload";
 
 import { readVersionsPage } from "../helpers/readVersionsPage.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
@@ -13,14 +13,18 @@ import type { SQLiteDocumentsAdapter } from "../index.js";
  * `where`/`sort` Payload passes address the stored record directly (`parent`,
  * `updatedAt`, `latest`, `version.…`), so no rewriting is needed.
  *
- * Declared as a regular function (not an arrow) so Payload binds `this` to the
- * live adapter, exposing the connection handle opened in `init`.
+ * Written as a generic function so the returned docs come back as
+ * `TypeWithVersion<T>`. Declared as a regular function (not an arrow) so
+ * Payload binds `this` to the live adapter, exposing the connection handle
+ * opened in `init`.
  */
-export const findVersions: FindVersions = async function findVersions(
+export const findVersions: FindVersions = async function findVersions<
+  T = JsonObject,
+>(
   this: SQLiteDocumentsAdapter,
-  { collection, limit, page, pagination, sort, where },
+  { collection, limit, page, pagination, sort, where }: FindVersionsArgs,
 ) {
-  const { docs, meta } = readVersionsPage({
+  const { docs, meta } = readVersionsPage<T>({
     connection: this.connection,
     limit,
     page,

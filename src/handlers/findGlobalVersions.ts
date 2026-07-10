@@ -1,4 +1,8 @@
-import type { FindGlobalVersions } from "payload";
+import type {
+  FindGlobalVersions,
+  FindGlobalVersionsArgs,
+  JsonObject,
+} from "payload";
 
 import { readVersionsPage } from "../helpers/readVersionsPage.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
@@ -12,15 +16,17 @@ import type { SQLiteDocumentsAdapter } from "../index.js";
  * `global_slug`. Global versions have no `parent`, but are otherwise the same
  * records.
  *
- * Declared as a regular function (not an arrow) so Payload binds `this` to the
- * live adapter, exposing the connection handle opened in `init`.
+ * Written as a generic function so the returned docs come back as
+ * `TypeWithVersion<T>`. Declared as a regular function (not an arrow) so
+ * Payload binds `this` to the live adapter, exposing the connection handle
+ * opened in `init`.
  */
 export const findGlobalVersions: FindGlobalVersions =
-  async function findGlobalVersions(
+  async function findGlobalVersions<T = JsonObject>(
     this: SQLiteDocumentsAdapter,
-    { global, limit, page, pagination, sort, where },
+    { global, limit, page, pagination, sort, where }: FindGlobalVersionsArgs,
   ) {
-    const { docs, meta } = readVersionsPage({
+    const { docs, meta } = readVersionsPage<T>({
       connection: this.connection,
       limit,
       page,
