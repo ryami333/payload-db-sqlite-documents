@@ -369,6 +369,10 @@ const toValueList = (rawValue: unknown): SqliteParam[] =>
 const toSqliteParam = (value: unknown): SqliteParam => {
   if (value === null) return null;
   if (typeof value === "boolean") return value ? 1 : 0;
+  // Payload passes `Date` operands for timestamp queries (e.g. document-lock
+  // checks). Dates are stored in `doc` JSON as ISO strings (JSON.stringify's
+  // Date serialisation), so match against the same ISO representation.
+  if (value instanceof Date) return value.toISOString();
   if (
     typeof value === "string" ||
     typeof value === "number" ||

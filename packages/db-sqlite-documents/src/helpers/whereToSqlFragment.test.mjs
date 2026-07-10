@@ -226,6 +226,16 @@ describe("whereToSqlFragment", () => {
     }
   });
 
+  it("binds a Date operand as its ISO string", () => {
+    // Payload passes real Date objects for timestamp queries (e.g. lock
+    // checks); dates live in the doc JSON as ISO strings, so match on those.
+    const date = new Date("2026-07-10T11:47:38.687Z");
+    expect(whereToSqlFragment({ updatedAt: { greater_than: date } })).toEqual({
+      sql: "json_extract(doc, ?) > ?",
+      params: ["$.updatedAt", "2026-07-10T11:47:38.687Z"],
+    });
+  });
+
   it("throws on a query value it cannot bind", () => {
     expect(() =>
       whereToSqlFragment({ tags: { greater_than: { nested: true } } }),
