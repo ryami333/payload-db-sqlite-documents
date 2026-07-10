@@ -168,14 +168,10 @@ describe("whereToSqlFragment", () => {
     });
   });
 
-  it("keeps a single-word like/not_like as a plain LIKE", () => {
+  it("keeps a single-word like as a plain LIKE", () => {
     expect(whereToSqlFragment({ title: { like: "ell" } })).toEqual({
       sql: "json_extract(doc, ?) LIKE ?",
       params: ["$.title", "%ell%"],
-    });
-    expect(whereToSqlFragment({ title: { not_like: "spam" } })).toEqual({
-      sql: "json_extract(doc, ?) NOT LIKE ?",
-      params: ["$.title", "%spam%"],
     });
   });
 
@@ -186,11 +182,22 @@ describe("whereToSqlFragment", () => {
     });
   });
 
-  it("negates a multi-word not_like with OR (De Morgan)", () => {
-    // not-all-words-present = missing at least one word.
+  it("adds an IS NULL disjunct to not_like so absent fields match", () => {
+    // Mongo parity: a row missing the field is "not like" the value. Even a
+    // single-word not_like carries the OR-IS-NULL branch.
+    expect(whereToSqlFragment({ title: { not_like: "spam" } })).toEqual({
+      sql: "(json_extract(doc, ?) NOT LIKE ? OR json_extract(doc, ?) IS NULL)",
+      params: ["$.title", "%spam%", "$.title"],
+    });
+  });
+
+  it("negates a multi-word not_like with OR, plus the IS NULL branch", () => {
+    // not-all-words-present (De Morgan) OR field absent.
     expect(whereToSqlFragment({ title: { not_like: "hello world" } })).toEqual({
-      sql: "(json_extract(doc, ?) NOT LIKE ? OR json_extract(doc, ?) NOT LIKE ?)",
-      params: ["$.title", "%hello%", "$.title", "%world%"],
+      sql:
+        "(json_extract(doc, ?) NOT LIKE ? OR json_extract(doc, ?) NOT LIKE ? " +
+        "OR json_extract(doc, ?) IS NULL)",
+      params: ["$.title", "%hello%", "$.title", "%world%", "$.title"],
     });
   });
 

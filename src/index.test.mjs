@@ -607,6 +607,17 @@ describe("sqliteDocumentsAdapter", () => {
       ).toEqual([]);
     });
 
+    it("not_like matches rows missing the field (db-mongodb parity)", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await seed(adapter);
+
+      // Alpha ("published") doesn't contain "draft"; Gamma has no `status` at
+      // all, and a missing field is trivially "not like" anything.
+      expect(
+        await titlesMatching(adapter, { status: { not_like: "draft" } }),
+      ).toEqual(["Alpha", "Gamma"]);
+    });
+
     it("exists distinguishes present from missing fields", async () => {
       const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
       await seed(adapter);

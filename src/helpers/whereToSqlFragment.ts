@@ -299,10 +299,14 @@ const allSql = ({
 /**
  * Build a `like` / `not_like` fragment. Payload's `like` splits the value on
  * whitespace and requires *every* word to appear (each a case-insensitive
- * substring), ANDed; `not_like` is the De Morgan negation (`OR` of `NOT LIKE`),
- * so a single-word query stays a plain `LIKE`/`NOT LIKE`. The column repeats once
- * per word, so this builds its own params (no `withColumn`). A value with no
- * words falls back to matching it whole, keeping behaviour defined.
+ * substring), ANDed; `not_like` is the De Morgan negation (`OR` of `NOT LIKE`).
+ * The column repeats once per word, so this builds its own params (no
+ * `withColumn`). A value with no words falls back to matching it whole, keeping
+ * behaviour defined.
+ *
+ * `not_like` also matches rows missing the field: a `NOT LIKE` on a NULL column
+ * is NULL (excluded), so an `OR <col> IS NULL` disjunct is appended — mirroring
+ * db-mongodb's `$not: { $regex }`, where an absent field can't contain the value.
  */
 const likeSql = ({
   columnFragment,
@@ -322,11 +326,20 @@ const likeSql = ({
   const comparison = negated ? "NOT LIKE" : "LIKE";
   const joiner = negated ? " OR " : " AND ";
 
-  const checks = patterns.map(() => `${columnFragment.sql} ${comparison} ?`);
-  const params = patterns.flatMap((pattern) => [
+  const wordChecks = patterns.map(
+    () => `${columnFragment.sql} ${comparison} ?`,
+  );
+  const wordParams = patterns.flatMap((pattern) => [
     ...columnFragment.params,
     pattern,
   ]);
+
+  // Include absent-field rows in `not_like` (they trivially don't contain it).
+  const nullChecks = negated ? [`${columnFragment.sql} IS NULL`] : [];
+  const nullParams = negated ? columnFragment.params : [];
+
+  const checks = [...wordChecks, ...nullChecks];
+  const params = [...wordParams, ...nullParams];
 
   return {
     sql: checks.length === 1 ? checks[0] : `(${checks.join(joiner)})`,
