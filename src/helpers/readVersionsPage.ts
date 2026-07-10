@@ -59,15 +59,15 @@ export const readVersionsPage = ({
   });
 
   const sortFragment = sortToSqlFragment(sort);
-  const limitClause = paginated
+  const limitFragment = paginated
     ? { sql: " LIMIT ? OFFSET ?", params: [meta.limit, offset] }
     : { sql: "", params: [] };
 
   const rows = connection
     .prepare(
-      `SELECT doc FROM ${table} WHERE ${scopedClause} ORDER BY ${sortFragment.sql}${limitClause.sql}`,
+      `SELECT doc FROM ${table} WHERE ${scopedClause} ORDER BY ${sortFragment.sql}${limitFragment.sql}`,
     )
-    .all(...scopedParams, ...sortFragment.params, ...limitClause.params);
+    .all(...scopedParams, ...sortFragment.params, ...limitFragment.params);
 
   const docs = rows.flatMap((row) =>
     typeof row.doc === "string" ? [JSON.parse(row.doc)] : [],

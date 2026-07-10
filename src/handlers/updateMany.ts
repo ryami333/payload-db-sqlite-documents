@@ -32,19 +32,19 @@ export const updateMany: UpdateMany = async function updateMany(
   const sortFragment = sortToSqlFragment(sort);
 
   // A positive limit caps how many matches are updated; 0/undefined means all.
-  const limitClause =
+  const limitFragment =
     typeof limit === "number" && limit > 0
       ? { sql: " LIMIT ?", params: [limit] }
       : { sql: "", params: [] };
 
   const rows = this.connection
     .prepare(
-      `SELECT id, doc FROM ${table} WHERE ${whereFragment.sql} ORDER BY ${sortFragment.sql}${limitClause.sql}`,
+      `SELECT id, doc FROM ${table} WHERE ${whereFragment.sql} ORDER BY ${sortFragment.sql}${limitFragment.sql}`,
     )
     .all(
       ...whereFragment.params,
       ...sortFragment.params,
-      ...limitClause.params,
+      ...limitFragment.params,
     );
 
   const update = this.connection.prepare(

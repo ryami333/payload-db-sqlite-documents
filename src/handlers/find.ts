@@ -47,15 +47,15 @@ export const find: Find = async function find(
 
   // Keep the LIMIT/OFFSET fragment's SQL and its params together so they can't
   // drift out of sync; an empty fragment when unpaginated composes to nothing.
-  const limitClause = paginated
+  const limitFragment = paginated
     ? { sql: " LIMIT ? OFFSET ?", params: [meta.limit, offset] }
     : { sql: "", params: [] };
 
-  const query = `SELECT doc FROM ${table} WHERE ${whereFragment.sql} ORDER BY ${sortFragment.sql}${limitClause.sql}`;
+  const query = `SELECT doc FROM ${table} WHERE ${whereFragment.sql} ORDER BY ${sortFragment.sql}${limitFragment.sql}`;
   const queryParams = [
     ...whereFragment.params,
     ...sortFragment.params,
-    ...limitClause.params,
+    ...limitFragment.params,
   ];
 
   const rows = this.connection.prepare(query).all(...queryParams);

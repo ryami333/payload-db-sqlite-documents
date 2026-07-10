@@ -56,19 +56,19 @@ export const findDistinct: FindDistinct = async function findDistinct(
   const direction =
     typeof firstSort === "string" && firstSort.startsWith("-") ? "DESC" : "ASC";
 
-  const limitClause = paginated
+  const limitFragment = paginated
     ? { sql: " LIMIT ? OFFSET ?", params: [meta.limit, offset] }
     : { sql: "", params: [] };
 
   const rows = this.connection
     .prepare(
-      `SELECT DISTINCT ${column} AS value FROM ${table} WHERE ${whereFragment.sql} AND ${column} IS NOT NULL ORDER BY value ${direction}${limitClause.sql}`,
+      `SELECT DISTINCT ${column} AS value FROM ${table} WHERE ${whereFragment.sql} AND ${column} IS NOT NULL ORDER BY value ${direction}${limitFragment.sql}`,
     )
     .all(
       ...fieldParams,
       ...whereFragment.params,
       ...fieldParams,
-      ...limitClause.params,
+      ...limitFragment.params,
     );
 
   const values = rows.map((row) => ({ [field]: row.value }));
