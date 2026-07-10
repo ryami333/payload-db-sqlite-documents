@@ -147,3 +147,10 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Sandbox (Next + Payload) local artifacts
+sandbox/payload-db.sqlite
+sandbox/payload-db.sqlite-shm
+sandbox/payload-db.sqlite-wal
+sandbox/next-env.d.ts
+sandbox/src/payload-types.ts

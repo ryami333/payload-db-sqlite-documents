@@ -26,12 +26,17 @@ jobs:
       - name: Install Dependencies
         run: yarn install --immutable
       - name: Test
-        run: yarn test
+        run: yarn workspace payload-db-sqlite-documents test
   formatting:
     strategy:
       matrix:
         script:
-          ["yarn build", "yarn eslint .", "yarn prettier . --check", "yarn tsc"]
+          [
+            "yarn workspace payload-db-sqlite-documents build",
+            "yarn workspace payload-db-sqlite-documents lint",
+            "yarn prettier . --check",
+            "yarn workspace payload-db-sqlite-documents tsc",
+          ]
       # Default behaviour is "true" - which cancels all queued or in-progress jobs when one fails, which we don't want.
       fail-fast: false
     runs-on: ubuntu-latest
