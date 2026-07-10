@@ -84,6 +84,128 @@ describe("sqliteDocumentsAdapter", () => {
     });
   });
 
+  describe("timestamps", () => {
+    /**
+     * A fake Payload whose sanitised config registers `collection` with the
+     * given `timestamps` setting — the signal collectionTimestampsEnabled reads
+     * to decide whether to stamp. Payload adds `createdAt`/`updatedAt` fields
+     * but never fills them, so the adapter must.
+     *
+     * @param {{ slug: string, timestamps?: boolean }} collection
+     * @returns {import("payload").Payload}
+     */
+    const payloadWith = (collection) =>
+      /** @type {any} */ ({ config: { collections: [collection] } });
+
+    const isoRe = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/;
+
+    it("stamps createdAt and updatedAt on create", async () => {
+      const adapter = sqliteDocumentsAdapter().init({
+        payload: payloadWith({ slug: "posts" }),
+      });
+
+      const doc = /** @type {any} */ (
+        await adapter.create(
+          /** @type {any} */ ({ collection: "posts", data: { title: "Hi" } }),
+        )
+      );
+
+      expect(doc.createdAt).toMatch(isoRe);
+      // Both stamps come from the same insert, so they match.
+      expect(doc.updatedAt).toBe(doc.createdAt);
+    });
+
+    it("does not stamp a collection with timestamps: false", async () => {
+      const adapter = sqliteDocumentsAdapter().init({
+        payload: payloadWith({ slug: "posts", timestamps: false }),
+      });
+
+      const doc = /** @type {any} */ (
+        await adapter.create(
+          /** @type {any} */ ({ collection: "posts", data: { title: "Hi" } }),
+        )
+      );
+
+      expect(doc.createdAt).toBeUndefined();
+      expect(doc.updatedAt).toBeUndefined();
+    });
+
+    it("preserves timestamps a caller supplies explicitly on create", async () => {
+      const adapter = sqliteDocumentsAdapter().init({
+        payload: payloadWith({ slug: "posts" }),
+      });
+
+      const doc = /** @type {any} */ (
+        await adapter.create(
+          /** @type {any} */ ({
+            collection: "posts",
+            data: { title: "Imported", createdAt: "2020-01-01T00:00:00.000Z" },
+          }),
+        )
+      );
+
+      expect(doc.createdAt).toBe("2020-01-01T00:00:00.000Z");
+      // updatedAt wasn't supplied, so it still gets stamped.
+      expect(doc.updatedAt).toMatch(isoRe);
+    });
+
+    it("refreshes updatedAt on updateOne but keeps createdAt", async () => {
+      const adapter = sqliteDocumentsAdapter().init({
+        payload: payloadWith({ slug: "posts" }),
+      });
+
+      const created = /** @type {any} */ (
+        await adapter.create(
+          /** @type {any} */ ({
+            collection: "posts",
+            customID: "p1",
+            data: { title: "Before" },
+          }),
+        )
+      );
+
+      const updated = /** @type {any} */ (
+        await adapter.updateOne(
+          /** @type {any} */ ({
+            collection: "posts",
+            id: "p1",
+            data: { title: "After" },
+          }),
+        )
+      );
+
+      expect(updated.createdAt).toBe(created.createdAt);
+      expect(updated.updatedAt).toMatch(isoRe);
+      expect(updated.updatedAt >= created.updatedAt).toBe(true);
+    });
+
+    it("refreshes updatedAt on updateMany", async () => {
+      const adapter = sqliteDocumentsAdapter().init({
+        payload: payloadWith({ slug: "posts" }),
+      });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "p1",
+          data: { title: "A", flag: true },
+        }),
+      );
+
+      const [updated] = /** @type {any[]} */ (
+        await adapter.updateMany(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { flag: { equals: true } },
+            data: { title: "A2" },
+          }),
+        )
+      );
+
+      expect(updated.updatedAt).toMatch(isoRe);
+    });
+  });
+
   describe("findOne", () => {
     it("reads a created document back through the public API", async () => {
       const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });

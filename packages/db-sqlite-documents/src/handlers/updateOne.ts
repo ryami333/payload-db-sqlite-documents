@@ -1,5 +1,6 @@
 import type { UpdateOne } from "payload";
 
+import { collectionTimestampsEnabled } from "../helpers/collectionTimestampsEnabled.js";
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
 import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
@@ -45,7 +46,21 @@ export const updateOne: UpdateOne = async function updateOne(
     return null;
   }
 
-  const doc = { ...JSON.parse(row.doc), ...data, id: row.id };
+  const doc: Record<string, unknown> = {
+    ...JSON.parse(row.doc),
+    ...data,
+    id: row.id,
+  };
+
+  // Refresh `updatedAt` on every write (Payload doesn't set it — see
+  // collectionTimestampsEnabled), unless the caller passed one explicitly.
+  // `createdAt` is left untouched, carried over from the stored document.
+  if (
+    data.updatedAt == null &&
+    collectionTimestampsEnabled({ payload: this.payload, slug: collection })
+  ) {
+    doc.updatedAt = new Date().toISOString();
+  }
 
   this.connection
     .prepare(`UPDATE ${table} SET doc = ? WHERE id = ?`)

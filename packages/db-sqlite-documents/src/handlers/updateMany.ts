@@ -1,5 +1,6 @@
 import type { UpdateMany } from "payload";
 
+import { collectionTimestampsEnabled } from "../helpers/collectionTimestampsEnabled.js";
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
 import { sortToSqlFragment } from "../helpers/sortToSqlFragment.js";
 import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
@@ -51,12 +52,23 @@ export const updateMany: UpdateMany = async function updateMany(
     `UPDATE ${table} SET doc = ? WHERE id = ?`,
   );
 
+  // Refresh `updatedAt` on every write (Payload doesn't set it — see
+  // collectionTimestampsEnabled), unless the caller passed one explicitly.
+  const stampUpdatedAt =
+    data.updatedAt == null &&
+    collectionTimestampsEnabled({ payload: this.payload, slug: collection });
+
   const docs = rows.flatMap((row) => {
     // Skip anything we can't read back as our own JSON rather than trusting the
     // loose SQLite output type.
     if (typeof row.id !== "string" || typeof row.doc !== "string") return [];
 
-    const doc = { ...JSON.parse(row.doc), ...data, id: row.id };
+    const doc: Record<string, unknown> = {
+      ...JSON.parse(row.doc),
+      ...data,
+      id: row.id,
+    };
+    if (stampUpdatedAt) doc.updatedAt = new Date().toISOString();
     update.run(JSON.stringify(doc), row.id);
     return [doc];
   });
