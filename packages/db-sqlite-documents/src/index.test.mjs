@@ -1523,6 +1523,73 @@ describe("sqliteDocumentsAdapter", () => {
     });
   });
 
+  describe("global timestamps", () => {
+    /**
+     * A fake Payload whose sanitised config registers a global under `slug` —
+     * the signal globalTimestampsEnabled reads. Globals always carry
+     * `createdAt`/`updatedAt` (no opt-out), so registration is enough.
+     *
+     * @param {string} slug
+     * @returns {import("payload").Payload}
+     */
+    const payloadWithGlobal = (slug) =>
+      /** @type {any} */ ({ config: { globals: [{ slug }] } });
+
+    const isoRe = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/;
+
+    it("stamps createdAt and updatedAt on createGlobal", async () => {
+      const adapter = sqliteDocumentsAdapter().init({
+        payload: payloadWithGlobal("settings"),
+      });
+
+      const doc = /** @type {any} */ (
+        await adapter.createGlobal(
+          /** @type {any} */ ({ slug: "settings", data: { title: "Site" } }),
+        )
+      );
+
+      expect(doc.createdAt).toMatch(isoRe);
+      expect(doc.updatedAt).toBe(doc.createdAt);
+    });
+
+    it("stamps both timestamps when updateGlobal upserts a new global", async () => {
+      const adapter = sqliteDocumentsAdapter().init({
+        payload: payloadWithGlobal("settings"),
+      });
+
+      const doc = /** @type {any} */ (
+        await adapter.updateGlobal(
+          /** @type {any} */ ({ slug: "settings", data: { title: "Fresh" } }),
+        )
+      );
+
+      expect(doc.createdAt).toMatch(isoRe);
+      expect(doc.updatedAt).toMatch(isoRe);
+    });
+
+    it("refreshes updatedAt on updateGlobal but keeps createdAt", async () => {
+      const adapter = sqliteDocumentsAdapter().init({
+        payload: payloadWithGlobal("settings"),
+      });
+
+      const created = /** @type {any} */ (
+        await adapter.createGlobal(
+          /** @type {any} */ ({ slug: "settings", data: { title: "Old" } }),
+        )
+      );
+
+      const updated = /** @type {any} */ (
+        await adapter.updateGlobal(
+          /** @type {any} */ ({ slug: "settings", data: { title: "New" } }),
+        )
+      );
+
+      expect(updated.createdAt).toBe(created.createdAt);
+      expect(updated.updatedAt).toMatch(isoRe);
+      expect(updated.updatedAt >= created.updatedAt).toBe(true);
+    });
+  });
+
   describe("versions", () => {
     /**
      * Build createVersion args with sensible defaults.

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { CreateGlobal, CreateGlobalArgs } from "payload";
 
 import { ensureGlobalsTable } from "../helpers/ensureGlobalsTable.js";
+import { globalTimestampsEnabled } from "../helpers/globalTimestampsEnabled.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
@@ -35,6 +36,15 @@ export const createGlobal: CreateGlobal = async function createGlobal<
       : undefined;
   const id = dataId ?? randomUUID();
   const doc: Record<string, unknown> = { ...data, id };
+
+  // Payload adds `createdAt`/`updatedAt` to globals but leaves them for the
+  // adapter to fill (see globalTimestampsEnabled). Stamp both on insert, without
+  // clobbering values a caller supplied explicitly.
+  if (globalTimestampsEnabled({ payload: this.payload, slug })) {
+    const now = new Date().toISOString();
+    if (doc.createdAt == null) doc.createdAt = now;
+    if (doc.updatedAt == null) doc.updatedAt = now;
+  }
 
   // Store id in its own column (as text, like collections) so a `where` on id
   // resolves; slug remains the key.

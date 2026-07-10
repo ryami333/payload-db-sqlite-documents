@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { UpdateGlobal } from "payload";
 
 import { ensureGlobalsTable } from "../helpers/ensureGlobalsTable.js";
+import { globalTimestampsEnabled } from "../helpers/globalTimestampsEnabled.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
@@ -37,6 +38,16 @@ export const updateGlobal: UpdateGlobal = async function updateGlobal(
       : undefined;
   const id = existingDoc.id ?? dataId ?? randomUUID();
   const doc = { ...existingDoc, ...data, id };
+
+  // Payload doesn't fill globals' timestamps (see globalTimestampsEnabled):
+  // refresh `updatedAt` on every write unless the caller passed one, and set
+  // `createdAt` when this upsert is creating the global (no existing doc to
+  // carry one over).
+  if (globalTimestampsEnabled({ payload: this.payload, slug })) {
+    const now = new Date().toISOString();
+    if (doc.createdAt == null) doc.createdAt = now;
+    if (data.updatedAt == null) doc.updatedAt = now;
+  }
 
   // Keep the id column (text, like collections) in step with doc.id so a
   // `where` on id resolves; slug remains the key.
