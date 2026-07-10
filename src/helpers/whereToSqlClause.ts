@@ -1,19 +1,7 @@
 import type { Where, WhereField } from "payload";
 
 import { fieldToSqlColumn } from "./fieldToSqlColumn.js";
-
-/**
- * Values we know how to bind as SQLite statement parameters. Booleans are
- * normalised to `1`/`0` before they get here (see {@link toSqliteParam}), so
- * they're deliberately absent — `node:sqlite` rejects a bare boolean.
- */
-type SqliteParam = bigint | number | string | null;
-
-/** A parameterised SQL fragment: text plus the values its `?`s bind to. */
-interface SqlFragment {
-  sql: string;
-  params: SqliteParam[];
-}
+import type { SqlFragment, SqliteParam } from "./sqlite.types.js";
 
 /**
  * A parameterised SQL fragment: a boolean `clause` suitable for dropping in
