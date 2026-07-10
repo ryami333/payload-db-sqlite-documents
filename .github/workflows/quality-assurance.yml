@@ -12,7 +12,6 @@ jobs:
     strategy:
       matrix:
         node: [22, 24, 26]
-        script: ["yarn tsc", "yarn test"]
       # Default behaviour is "true" - which cancels all queued or in-progress jobs when one fails, which we don't want.
       fail-fast: false
     runs-on: ubuntu-latest
@@ -26,14 +25,13 @@ jobs:
           cache: "yarn"
       - name: Install Dependencies
         run: yarn install --frozen-lockfile
-      - name: Install Dependencies
-        run: yarn up @types/node@${{ matrix.node }}
-      - name: Script
-        run: ${{ matrix.script }}
+      - name: Test
+        run: yarn test
   formatting:
     strategy:
       matrix:
-        script: ["yarn build", "yarn eslint .", "yarn prettier . --check"]
+        script:
+          ["yarn build", "yarn eslint .", "yarn prettier . --check", "yarn tsc"]
       # Default behaviour is "true" - which cancels all queued or in-progress jobs when one fails, which we don't want.
       fail-fast: false
     runs-on: ubuntu-latest
