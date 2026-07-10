@@ -2,7 +2,7 @@ import type { FindDistinct } from "payload";
 
 import { buildPaginationMeta } from "../helpers/buildPaginationMeta.js";
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { fieldToSqlColumn } from "../helpers/fieldToSqlColumn.js";
+import { fieldToColumnSqlFragment } from "../helpers/fieldToColumnSqlFragment.js";
 import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
@@ -12,7 +12,7 @@ import type { SQLiteDocumentsAdapter } from "../index.js";
  * shape, where each entry in `values` is `{ [field]: value }` and `totalDocs`
  * counts distinct values (not rows).
  *
- * The field resolves through {@link fieldToSqlColumn} (so `id` hits the indexed
+ * The field resolves through {@link fieldToColumnSqlFragment} (so `id` hits the indexed
  * column and everything else `json_extract(doc, …)`) and the filter through
  * {@link whereToSqlFragment}. Null/missing values are excluded from both the list
  * and the count — matching Mongo's `distinct`, and keeping `COUNT(DISTINCT …)`
@@ -34,14 +34,14 @@ export const findDistinct: FindDistinct = async function findDistinct(
     slug: collection,
   });
 
-  const { column, params: fieldParams } = fieldToSqlColumn(field);
+  const fieldFragment = fieldToColumnSqlFragment(field);
   const whereFragment = whereToSqlFragment(where);
 
   const countRow = this.connection
     .prepare(
-      `SELECT COUNT(DISTINCT ${column}) AS total FROM ${table} WHERE ${whereFragment.sql}`,
+      `SELECT COUNT(DISTINCT ${fieldFragment.sql}) AS total FROM ${table} WHERE ${whereFragment.sql}`,
     )
-    .get(...fieldParams, ...whereFragment.params);
+    .get(...fieldFragment.params, ...whereFragment.params);
   const totalDocs = typeof countRow?.total === "number" ? countRow.total : 0;
 
   const { meta, offset, paginated } = buildPaginationMeta({
@@ -62,12 +62,12 @@ export const findDistinct: FindDistinct = async function findDistinct(
 
   const rows = this.connection
     .prepare(
-      `SELECT DISTINCT ${column} AS value FROM ${table} WHERE ${whereFragment.sql} AND ${column} IS NOT NULL ORDER BY value ${direction}${limitFragment.sql}`,
+      `SELECT DISTINCT ${fieldFragment.sql} AS value FROM ${table} WHERE ${whereFragment.sql} AND ${fieldFragment.sql} IS NOT NULL ORDER BY value ${direction}${limitFragment.sql}`,
     )
     .all(
-      ...fieldParams,
+      ...fieldFragment.params,
       ...whereFragment.params,
-      ...fieldParams,
+      ...fieldFragment.params,
       ...limitFragment.params,
     );
 

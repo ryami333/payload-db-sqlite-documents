@@ -1,13 +1,13 @@
 import type { Sort } from "payload";
 
-import { fieldToSqlColumn } from "./fieldToSqlColumn.js";
-import type { SqlFragment } from "./sqlite.types.js";
+import { fieldToColumnSqlFragment } from "./fieldToColumnSqlFragment.js";
+import type { SqlFragment, SqliteParam } from "./sqlite.types.js";
 
 /**
  * Translate a Payload {@link Sort} into a parameterised SQLite `ORDER BY` body.
  *
  * A sort is a field name or a list of them; a leading `-` means descending
- * (`"-createdAt"`). Fields are resolved through {@link fieldToSqlColumn}, so `id`
+ * (`"-createdAt"`). Fields are resolved through {@link fieldToColumnSqlFragment}, so `id`
  * orders on the indexed column and everything else on `json_extract(doc, …)`.
  *
  * A stable `id` tiebreaker is always appended (unless the caller already sorts
@@ -20,7 +20,7 @@ export const sortToSqlFragment = (sort: Sort | undefined): SqlFragment => {
   const fields = sort === undefined ? [] : Array.isArray(sort) ? sort : [sort];
 
   const parts: string[] = [];
-  const params: string[] = [];
+  const params: SqliteParam[] = [];
   let sortsById = false;
 
   for (const field of fields) {
@@ -31,12 +31,12 @@ export const sortToSqlFragment = (sort: Sort | undefined): SqlFragment => {
     if (!path) continue;
     if (path === "id") sortsById = true;
 
-    const { column, params: columnParams } = fieldToSqlColumn(path);
-    parts.push(`${column} ${descending ? "DESC" : "ASC"}`);
-    params.push(...columnParams);
+    const columnFragment = fieldToColumnSqlFragment(path);
+    parts.push(`${columnFragment.sql} ${descending ? "DESC" : "ASC"}`);
+    params.push(...columnFragment.params);
   }
 
-  if (!sortsById) parts.push(`${fieldToSqlColumn("id").column} ASC`);
+  if (!sortsById) parts.push(`${fieldToColumnSqlFragment("id").sql} ASC`);
 
   return { sql: parts.join(", "), params };
 };

@@ -1,6 +1,6 @@
 import type { Where, WhereField } from "payload";
 
-import { fieldToSqlColumn } from "./fieldToSqlColumn.js";
+import { fieldToColumnSqlFragment } from "./fieldToColumnSqlFragment.js";
 import type { SqlFragment, SqliteParam } from "./sqlite.types.js";
 
 /**
@@ -63,7 +63,7 @@ const fieldConstraintToSql = (
   fieldPath: string,
   constraint: WhereField,
 ): SqlFragment => {
-  const { column, params: columnParams } = fieldToSqlColumn(fieldPath);
+  const columnFragment = fieldToColumnSqlFragment(fieldPath);
 
   const parts: string[] = [];
   const params: SqliteParam[] = [];
@@ -71,8 +71,7 @@ const fieldConstraintToSql = (
   for (const [operator, rawValue] of Object.entries(constraint)) {
     if (rawValue === undefined) continue;
     const fragment = operatorToSql({
-      column,
-      columnParams,
+      columnFragment,
       fieldPath,
       operator,
       rawValue,
@@ -89,19 +88,17 @@ const fieldConstraintToSql = (
  * Translate one `{ operator: value }` pair against a resolved column expression
  * into a self-contained {@link SqlFragment} — params included, in the order the
  * fragment's `?`s appear, so callers never have to reason about placeholder
- * counts. Each fragment prepends `columnParams` (the `json_extract` path) via
- * {@link withColumn}, except the degenerate empty-`in`/`not_in` cases which
- * don't reference the column at all.
+ * counts. Each fragment prepends `columnFragment.params` (the `json_extract`
+ * path) via {@link withColumn}, except the degenerate empty-`in`/`not_in` cases
+ * which don't reference the column at all.
  */
 const operatorToSql = ({
-  column,
-  columnParams,
+  columnFragment,
   fieldPath,
   operator,
   rawValue,
 }: {
-  column: string;
-  columnParams: string[];
+  columnFragment: SqlFragment;
   fieldPath: string;
   operator: string;
   rawValue: unknown;
@@ -111,7 +108,7 @@ const operatorToSql = ({
     params: SqliteParam[] = [],
   ): SqlFragment => ({
     sql,
-    params: [...columnParams, ...params],
+    params: [...columnFragment.params, ...params],
   });
 
   switch (operator) {
@@ -119,48 +116,60 @@ const operatorToSql = ({
       // `= ?` deliberately does *not* match NULL; an explicit null asks for the
       // absent/null rows, which needs `IS NULL`.
       return rawValue === null
-        ? withColumn(`${column} IS NULL`)
-        : withColumn(`${column} = ?`, [toSqliteParam(rawValue)]);
+        ? withColumn(`${columnFragment.sql} IS NULL`)
+        : withColumn(`${columnFragment.sql} = ?`, [toSqliteParam(rawValue)]);
 
     // NULL-safe inequality: a row whose field is missing (json_extract → NULL)
     // counts as "not equal", matching db-mongodb's `$ne`. `IS NOT ?` covers both
     // the null and non-null value cases.
     case "not_equals":
-      return withColumn(`${column} IS NOT ?`, [toSqliteParam(rawValue)]);
+      return withColumn(`${columnFragment.sql} IS NOT ?`, [
+        toSqliteParam(rawValue),
+      ]);
 
     case "greater_than":
-      return withColumn(`${column} > ?`, [toSqliteParam(rawValue)]);
+      return withColumn(`${columnFragment.sql} > ?`, [toSqliteParam(rawValue)]);
     case "greater_than_equal":
-      return withColumn(`${column} >= ?`, [toSqliteParam(rawValue)]);
+      return withColumn(`${columnFragment.sql} >= ?`, [
+        toSqliteParam(rawValue),
+      ]);
     case "less_than":
-      return withColumn(`${column} < ?`, [toSqliteParam(rawValue)]);
+      return withColumn(`${columnFragment.sql} < ?`, [toSqliteParam(rawValue)]);
     case "less_than_equal":
-      return withColumn(`${column} <= ?`, [toSqliteParam(rawValue)]);
+      return withColumn(`${columnFragment.sql} <= ?`, [
+        toSqliteParam(rawValue),
+      ]);
 
     case "in":
-      return inSql({ column, negated: false, rawValue, withColumn });
+      return inSql({ columnFragment, negated: false, rawValue, withColumn });
     case "not_in":
-      return inSql({ column, negated: true, rawValue, withColumn });
+      return inSql({ columnFragment, negated: true, rawValue, withColumn });
 
     // Array-contains-all: the JSON array at the field holds every given value.
     // Expands the array with json_each per required value; unrelated to the
-    // scalar `column`, so it builds its own path params (no withColumn).
+    // scalar column, so it builds its own path params (no withColumn).
     case "all":
       return allSql({ fieldPath, rawValue });
 
     // json_extract yields NULL for a missing key, so presence is just a null
     // check. (A key explicitly set to JSON null reads as absent here too.)
     case "exists":
-      return withColumn(`${column} IS ${rawValue ? "NOT NULL" : "NULL"}`);
+      return withColumn(
+        `${columnFragment.sql} IS ${rawValue ? "NOT NULL" : "NULL"}`,
+      );
 
     // Case-insensitive substring match (SQLite LIKE is ASCII-case-insensitive).
     // `contains` and `like` behave identically here; a value containing `%`/`_`
     // acts as a wildcard — a known simplification for now.
     case "contains":
     case "like":
-      return withColumn(`${column} LIKE ?`, [`%${textValue(rawValue)}%`]);
+      return withColumn(`${columnFragment.sql} LIKE ?`, [
+        `%${textValue(rawValue)}%`,
+      ]);
     case "not_like":
-      return withColumn(`${column} NOT LIKE ?`, [`%${textValue(rawValue)}%`]);
+      return withColumn(`${columnFragment.sql} NOT LIKE ?`, [
+        `%${textValue(rawValue)}%`,
+      ]);
 
     // Geospatial operators need geometry support SQLite/JSON storage doesn't
     // have — not a "yet", they're out of scope for this adapter.
@@ -185,12 +194,12 @@ const operatorToSql = ({
  * since neither references the column, they skip `withColumn`.
  */
 const inSql = ({
-  column,
+  columnFragment,
   negated,
   rawValue,
   withColumn,
 }: {
-  column: string;
+  columnFragment: SqlFragment;
   negated: boolean;
   rawValue: unknown;
   withColumn: (sql: string, params?: SqliteParam[]) => SqlFragment;
@@ -201,7 +210,7 @@ const inSql = ({
 
   const placeholders = values.map(() => "?").join(", ");
   return withColumn(
-    `${column} ${negated ? "NOT IN" : "IN"} (${placeholders})`,
+    `${columnFragment.sql} ${negated ? "NOT IN" : "IN"} (${placeholders})`,
     values,
   );
 };

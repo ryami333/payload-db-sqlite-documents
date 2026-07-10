@@ -1,4 +1,5 @@
 import { quoteSqliteIdentifier } from "./quoteSqliteIdentifier.js";
+import type { SqlFragment } from "./sqlite.types.js";
 
 /**
  * Map a Payload field path to the SQL expression that reads it, plus any
@@ -15,9 +16,7 @@ import { quoteSqliteIdentifier } from "./quoteSqliteIdentifier.js";
  * ({@link sortToSqlFragment}) translations so both agree on how a field name
  * becomes SQL.
  */
-export const fieldToSqlColumn = (
-  fieldPath: string,
-): { column: string; params: string[] } =>
+export const fieldToColumnSqlFragment = (fieldPath: string): SqlFragment =>
   fieldPath === "id"
-    ? { column: quoteSqliteIdentifier("id"), params: [] }
-    : { column: "json_extract(doc, ?)", params: [`$.${fieldPath}`] };
+    ? { sql: quoteSqliteIdentifier("id"), params: [] }
+    : { sql: "json_extract(doc, ?)", params: [`$.${fieldPath}`] };
