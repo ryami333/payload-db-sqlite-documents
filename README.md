@@ -14,7 +14,7 @@ Because storage is schemaless and migration-less like Mongo, yet backed by a sin
 
 ## Requirements
 
-- **Node.js** `^22 || ^24 || ^26` — `node:sqlite` is a built-in, so no `better-sqlite3`/native build step.
+- **Node.js** `^22 || ^24 || ^26` — where `node:sqlite` is a built-in.
 - **Payload** `^3.85.2` (peer dependency).
 
 ## Installation
