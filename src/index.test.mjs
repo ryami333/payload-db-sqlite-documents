@@ -611,6 +611,36 @@ describe("sqliteDocumentsAdapter", () => {
         }),
       ).toEqual(["Gamma"]);
     });
+
+    it("all matches when the array field contains every listed value", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "Both", tags: ["a", "b", "c"] },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "OnlyA", tags: ["a"] },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "None", tags: [] },
+        }),
+      );
+
+      expect(
+        await titlesMatching(adapter, { tags: { all: ["a", "b"] } }),
+      ).toEqual(["Both"]);
+      expect(await titlesMatching(adapter, { tags: { all: ["a"] } })).toEqual([
+        "Both",
+        "OnlyA",
+      ]);
+    });
   });
 
   describe("updateMany", () => {

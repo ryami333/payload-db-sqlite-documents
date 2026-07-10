@@ -159,14 +159,29 @@ describe("whereToSqlClause", () => {
     });
   });
 
-  it("still throws on the array/geo operators it does not implement", () => {
-    // These must fail loudly rather than silently returning wrong rows.
-    expect(() => whereToSqlClause({ point: { near: [0, 0, 10] } })).toThrow(
-      'operator "near" is not supported yet',
-    );
-    expect(() => whereToSqlClause({ tags: { all: ["a"] } })).toThrow(
-      'operator "all" is not supported yet',
-    );
+  it("expands all to a correlated json_each EXISTS per value", () => {
+    // The JSON array at the field must contain every listed value.
+    expect(whereToSqlClause({ tags: { all: ["x", "y"] } })).toEqual({
+      clause:
+        "(EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?) AND " +
+        "EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?))",
+      params: ["$.tags", "x", "$.tags", "y"],
+    });
+  });
+
+  it("treats an empty all as vacuously true", () => {
+    expect(whereToSqlClause({ tags: { all: [] } })).toEqual({
+      clause: "1",
+      params: [],
+    });
+  });
+
+  it("rejects the geospatial operators as unsupported (not a 'yet')", () => {
+    for (const operator of ["within", "intersects", "near"]) {
+      expect(() => whereToSqlClause({ point: { [operator]: [0, 0] } })).toThrow(
+        `geospatial query operator "${operator}" is not supported`,
+      );
+    }
   });
 
   it("throws on a query value it cannot bind", () => {

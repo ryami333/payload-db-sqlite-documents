@@ -35,11 +35,12 @@ export interface WhereSql {
  * column instead of a JSON lookup.
  *
  * Supported operators (see {@link operatorToSql}): `equals`, `not_equals`,
- * `greater_than[_equal]`, `less_than[_equal]`, `in`, `not_in`, `exists`,
- * `contains`, `like`, `not_like`, plus `and`/`or` composition. The array/geo
- * operators (`all`, `within`, `intersects`, `near`) throw rather than silently
- * returning wrong rows. Semantics track `db-mongodb` where they differ from
- * plain SQL (notably `not_equals`, which also matches absent fields).
+ * `greater_than[_equal]`, `less_than[_equal]`, `in`, `not_in`, `all`, `exists`,
+ * `contains`, `like`, `not_like`, plus `and`/`or` composition. The geospatial
+ * operators (`within`, `intersects`, `near`) throw — they need geometry support
+ * this JSON/SQLite storage doesn't have. Semantics track `db-mongodb` where they
+ * differ from plain SQL (notably `not_equals`, which also matches absent
+ * fields).
  */
 export const whereToSqlClause = (where: Where | undefined): WhereSql => {
   if (!where) return { clause: "1", params: [] };
@@ -94,6 +95,7 @@ const fieldConstraintToSql = (
     const fragment = operatorToSql({
       column,
       columnParams,
+      fieldPath,
       operator,
       rawValue,
     });
@@ -116,11 +118,13 @@ const fieldConstraintToSql = (
 const operatorToSql = ({
   column,
   columnParams,
+  fieldPath,
   operator,
   rawValue,
 }: {
   column: string;
   columnParams: string[];
+  fieldPath: string;
   operator: string;
   rawValue: unknown;
 }): SqlFragment => {
@@ -160,6 +164,12 @@ const operatorToSql = ({
     case "not_in":
       return inSql({ column, negated: true, rawValue, withColumn });
 
+    // Array-contains-all: the JSON array at the field holds every given value.
+    // Expands the array with json_each per required value; unrelated to the
+    // scalar `column`, so it builds its own path params (no withColumn).
+    case "all":
+      return allSql({ fieldPath, rawValue });
+
     // json_extract yields NULL for a missing key, so presence is just a null
     // check. (A key explicitly set to JSON null reads as absent here too.)
     case "exists":
@@ -173,6 +183,15 @@ const operatorToSql = ({
       return withColumn(`${column} LIKE ?`, [`%${textValue(rawValue)}%`]);
     case "not_like":
       return withColumn(`${column} NOT LIKE ?`, [`%${textValue(rawValue)}%`]);
+
+    // Geospatial operators need geometry support SQLite/JSON storage doesn't
+    // have — not a "yet", they're out of scope for this adapter.
+    case "within":
+    case "intersects":
+    case "near":
+      throw new Error(
+        `payload-db-sqlite-documents: geospatial query operator "${operator}" is not supported`,
+      );
 
     default:
       throw new Error(
@@ -198,13 +217,7 @@ const inSql = ({
   rawValue: unknown;
   withColumn: (sql: string, params?: SqliteParam[]) => SqlFragment;
 }): SqlFragment => {
-  const values = (
-    Array.isArray(rawValue)
-      ? rawValue
-      : typeof rawValue === "string"
-        ? rawValue.split(",")
-        : [rawValue]
-  ).map(toSqliteParam);
+  const values = toValueList(rawValue);
 
   if (values.length === 0) return { sql: negated ? "1" : "0", params: [] };
 
@@ -214,6 +227,48 @@ const inSql = ({
     values,
   );
 };
+
+/**
+ * Build an `all` fragment: the JSON array at `fieldPath` contains every listed
+ * value. Each required value gets a correlated `EXISTS` over `json_each` of the
+ * array, all ANDed. Builds its own `$.path` params (no `withColumn`), since it
+ * reads the array with `json_each(doc, …)` rather than the scalar column. An
+ * empty list is vacuously true ("contains all of nothing").
+ */
+const allSql = ({
+  fieldPath,
+  rawValue,
+}: {
+  fieldPath: string;
+  rawValue: unknown;
+}): SqlFragment => {
+  const values = toValueList(rawValue);
+  if (values.length === 0) return { sql: "1", params: [] };
+
+  const path = `$.${fieldPath}`;
+  const checks = values.map(
+    () => `EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?)`,
+  );
+  const params = values.flatMap((value) => [path, value]);
+
+  return {
+    sql: checks.length === 1 ? checks[0] : `(${checks.join(" AND ")})`,
+    params,
+  };
+};
+
+/**
+ * Normalise a list-valued operand (`in`/`not_in`/`all`) to bindable params:
+ * an array as-is, or a comma-separated string (the shape query strings arrive
+ * in) split into parts.
+ */
+const toValueList = (rawValue: unknown): SqliteParam[] =>
+  (Array.isArray(rawValue)
+    ? rawValue
+    : typeof rawValue === "string"
+      ? rawValue.split(",")
+      : [rawValue]
+  ).map(toSqliteParam);
 
 /**
  * Coerce a query value into something `node:sqlite` can bind. Booleans become
