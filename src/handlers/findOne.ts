@@ -1,14 +1,14 @@
 import type { FindOne } from "payload";
 
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
  * Fetch the first document in a collection matching `where`, or `null`.
  *
  * The stored JSON `doc` is read back and parsed; the `where` is compiled to a
- * parameterised clause by {@link whereToSqlClause}. Ensuring the table exists
+ * parameterised clause by {@link whereToSqlFragment}. Ensuring the table exists
  * first keeps a query against a never-written-to collection from throwing — it
  * simply finds nothing.
  *
@@ -24,10 +24,10 @@ export const findOne: FindOne = async function findOne(
     slug: collection,
   });
 
-  const { clause, params } = whereToSqlClause(where);
+  const { sql, params } = whereToSqlFragment(where);
 
   const row = this.connection
-    .prepare(`SELECT doc FROM ${table} WHERE ${clause} LIMIT 1`)
+    .prepare(`SELECT doc FROM ${table} WHERE ${sql} LIMIT 1`)
     .get(...params);
 
   // `doc` is typed as SQLite's loose output union; narrow to the string we

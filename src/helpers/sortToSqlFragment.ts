@@ -1,16 +1,7 @@
 import type { Sort } from "payload";
 
 import { fieldToSqlColumn } from "./fieldToSqlColumn.js";
-
-/**
- * A parameterised `ORDER BY` body: the `clause` is what follows `ORDER BY`
- * (never empty), and `params` are the `json_extract` path bindings its column
- * expressions reference.
- */
-export interface SortSql {
-  clause: string;
-  params: string[];
-}
+import type { SqlFragment } from "./sqlite.types.js";
 
 /**
  * Translate a Payload {@link Sort} into a parameterised SQLite `ORDER BY` body.
@@ -25,7 +16,7 @@ export interface SortSql {
  * order can drop or duplicate rows across pages. With no sort at all, the result
  * is simply `"id" ASC`.
  */
-export const sortToSqlClause = (sort: Sort | undefined): SortSql => {
+export const sortToSqlFragment = (sort: Sort | undefined): SqlFragment => {
   const fields = sort === undefined ? [] : Array.isArray(sort) ? sort : [sort];
 
   const parts: string[] = [];
@@ -47,5 +38,5 @@ export const sortToSqlClause = (sort: Sort | undefined): SortSql => {
 
   if (!sortsById) parts.push(`${fieldToSqlColumn("id").column} ASC`);
 
-  return { clause: parts.join(", "), params };
+  return { sql: parts.join(", "), params };
 };

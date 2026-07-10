@@ -1,7 +1,7 @@
 import type { UpdateVersion } from "payload";
 
 import { ensureVersionsTable } from "../helpers/ensureVersionsTable.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
@@ -23,14 +23,14 @@ export const updateVersion: UpdateVersion = async function updateVersion(
 ) {
   const table = ensureVersionsTable({ connection: this.connection });
 
-  const { clause, params } =
+  const { sql, params } =
     id === undefined
-      ? whereToSqlClause(where)
-      : whereToSqlClause({ id: { equals: String(id) } });
+      ? whereToSqlFragment(where)
+      : whereToSqlFragment({ id: { equals: String(id) } });
 
   const row = this.connection
     .prepare(
-      `SELECT doc FROM ${table} WHERE collection_slug = ? AND ${clause} LIMIT 1`,
+      `SELECT doc FROM ${table} WHERE collection_slug = ? AND ${sql} LIMIT 1`,
     )
     .get(collection, ...params);
 

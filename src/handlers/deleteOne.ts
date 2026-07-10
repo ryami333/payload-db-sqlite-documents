@@ -1,7 +1,7 @@
 import type { DeleteOne } from "payload";
 
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
@@ -11,7 +11,7 @@ import type { SQLiteDocumentsAdapter } from "../index.js";
  * The row is read first — both to return the deleted document and to pin the
  * delete to that exact `id` (SQLite's `DELETE` has no `LIMIT`, so matching by
  * the located id is how we guarantee only one row goes). `where` is compiled by
- * {@link whereToSqlClause}.
+ * {@link whereToSqlFragment}.
  *
  * Declared as a regular function (not an arrow) so Payload binds `this` to the
  * live adapter, exposing the connection handle opened in `init`.
@@ -25,10 +25,10 @@ export const deleteOne: DeleteOne = async function deleteOne(
     slug: collection,
   });
 
-  const { clause, params } = whereToSqlClause(where);
+  const { sql, params } = whereToSqlFragment(where);
 
   const row = this.connection
-    .prepare(`SELECT id, doc FROM ${table} WHERE ${clause} LIMIT 1`)
+    .prepare(`SELECT id, doc FROM ${table} WHERE ${sql} LIMIT 1`)
     .get(...params);
 
   // Nothing matched, or a row we can't read back as our own JSON — nothing to

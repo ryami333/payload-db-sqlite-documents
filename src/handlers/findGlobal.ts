@@ -1,14 +1,14 @@
 import type { FindGlobal } from "payload";
 
 import { ensureGlobalsTable } from "../helpers/ensureGlobalsTable.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
  * Fetch a global's document by `slug`, or `null` if it hasn't been created.
  *
  * A `where` (rare for a singleton, but Payload allows it) is ANDed onto the slug
- * lookup via {@link whereToSqlClause}, matching against the JSON `doc` the same
+ * lookup via {@link whereToSqlFragment}, matching against the JSON `doc` the same
  * way collection reads do — so it acts as a "return the global only if it also
  * matches" filter. Ensuring the table exists first keeps a lookup before any
  * global has been written from throwing.
@@ -22,10 +22,10 @@ export const findGlobal: FindGlobal = async function findGlobal(
 ) {
   const table = ensureGlobalsTable({ connection: this.connection });
 
-  const { clause, params } = whereToSqlClause(where);
+  const { sql, params } = whereToSqlFragment(where);
 
   const row = this.connection
-    .prepare(`SELECT doc FROM ${table} WHERE slug = ? AND ${clause} LIMIT 1`)
+    .prepare(`SELECT doc FROM ${table} WHERE slug = ? AND ${sql} LIMIT 1`)
     .get(slug, ...params);
 
   // `doc` is typed as SQLite's loose output union; narrow to the string we

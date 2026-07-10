@@ -4,16 +4,6 @@ import { fieldToSqlColumn } from "./fieldToSqlColumn.js";
 import type { SqlFragment, SqliteParam } from "./sqlite.types.js";
 
 /**
- * A parameterised SQL fragment: a boolean `clause` suitable for dropping in
- * after `WHERE`, plus the ordered `params` its `?` placeholders bind to. An
- * empty/absent query yields the always-true clause `"1"`.
- */
-export interface WhereSql {
-  clause: string;
-  params: SqliteParam[];
-}
-
-/**
  * Translate a Payload {@link Where} into a parameterised SQLite `WHERE` clause.
  *
  * Storage is a single JSON `doc` column per row, so non-`id` fields are matched
@@ -30,8 +20,8 @@ export interface WhereSql {
  * differ from plain SQL (notably `not_equals`, which also matches absent
  * fields).
  */
-export const whereToSqlClause = (where: Where | undefined): WhereSql => {
-  if (!where) return { clause: "1", params: [] };
+export const whereToSqlFragment = (where: Where | undefined): SqlFragment => {
+  if (!where) return { sql: "1", params: [] };
 
   const parts: string[] = [];
   const params: SqliteParam[] = [];
@@ -40,13 +30,13 @@ export const whereToSqlClause = (where: Where | undefined): WhereSql => {
     if (value === undefined) continue;
 
     if ((key === "and" || key === "or") && Array.isArray(value)) {
-      const nested = value.map(whereToSqlClause);
+      const nested = value.map(whereToSqlFragment);
       // An empty and/or constrains nothing; fold it to the always-true clause
       // so we never emit a syntactically invalid empty `()`.
       const joined =
         nested.length === 0
           ? "1"
-          : nested.map((n) => n.clause).join(key === "and" ? " AND " : " OR ");
+          : nested.map((n) => n.sql).join(key === "and" ? " AND " : " OR ");
       parts.push(`(${joined})`);
       for (const n of nested) params.push(...n.params);
       continue;
@@ -57,12 +47,12 @@ export const whereToSqlClause = (where: Where | undefined): WhereSql => {
     if (Array.isArray(value)) continue;
 
     const field = fieldConstraintToSql(key, value);
-    parts.push(field.clause);
+    parts.push(field.sql);
     params.push(...field.params);
   }
 
-  if (parts.length === 0) return { clause: "1", params: [] };
-  return { clause: parts.join(" AND "), params };
+  if (parts.length === 0) return { sql: "1", params: [] };
+  return { sql: parts.join(" AND "), params };
 };
 
 /**
@@ -72,7 +62,7 @@ export const whereToSqlClause = (where: Where | undefined): WhereSql => {
 const fieldConstraintToSql = (
   fieldPath: string,
   constraint: WhereField,
-): WhereSql => {
+): SqlFragment => {
   const { column, params: columnParams } = fieldToSqlColumn(fieldPath);
 
   const parts: string[] = [];
@@ -91,8 +81,8 @@ const fieldConstraintToSql = (
     params.push(...fragment.params);
   }
 
-  if (parts.length === 0) return { clause: "1", params: [] };
-  return { clause: parts.join(" AND "), params };
+  if (parts.length === 0) return { sql: "1", params: [] };
+  return { sql: parts.join(" AND "), params };
 };
 
 /**

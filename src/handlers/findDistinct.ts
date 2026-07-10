@@ -3,7 +3,7 @@ import type { FindDistinct } from "payload";
 import { buildPaginationMeta } from "../helpers/buildPaginationMeta.js";
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
 import { fieldToSqlColumn } from "../helpers/fieldToSqlColumn.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
@@ -14,7 +14,7 @@ import type { SQLiteDocumentsAdapter } from "../index.js";
  *
  * The field resolves through {@link fieldToSqlColumn} (so `id` hits the indexed
  * column and everything else `json_extract(doc, …)`) and the filter through
- * {@link whereToSqlClause}. Null/missing values are excluded from both the list
+ * {@link whereToSqlFragment}. Null/missing values are excluded from both the list
  * and the count — matching Mongo's `distinct`, and keeping `COUNT(DISTINCT …)`
  * (which already drops NULLs) in step with the listed rows. Ordering is by the
  * distinct value itself; `sort` only picks the direction, since ordering a
@@ -35,11 +35,11 @@ export const findDistinct: FindDistinct = async function findDistinct(
   });
 
   const { column, params: fieldParams } = fieldToSqlColumn(field);
-  const { clause, params: whereParams } = whereToSqlClause(where);
+  const { sql, params: whereParams } = whereToSqlFragment(where);
 
   const countRow = this.connection
     .prepare(
-      `SELECT COUNT(DISTINCT ${column}) AS total FROM ${table} WHERE ${clause}`,
+      `SELECT COUNT(DISTINCT ${column}) AS total FROM ${table} WHERE ${sql}`,
     )
     .get(...fieldParams, ...whereParams);
   const totalDocs = typeof countRow?.total === "number" ? countRow.total : 0;
@@ -62,7 +62,7 @@ export const findDistinct: FindDistinct = async function findDistinct(
 
   const rows = this.connection
     .prepare(
-      `SELECT DISTINCT ${column} AS value FROM ${table} WHERE ${clause} AND ${column} IS NOT NULL ORDER BY value ${direction}${limitClause.sql}`,
+      `SELECT DISTINCT ${column} AS value FROM ${table} WHERE ${sql} AND ${column} IS NOT NULL ORDER BY value ${direction}${limitClause.sql}`,
     )
     .all(...fieldParams, ...whereParams, ...fieldParams, ...limitClause.params);
 

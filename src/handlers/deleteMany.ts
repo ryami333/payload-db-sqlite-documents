@@ -1,14 +1,14 @@
 import type { DeleteMany } from "payload";
 
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
  * Delete every document matching `where`. Returns nothing (Payload's
  * {@link DeleteMany} contract is `Promise<void>`).
  *
- * A single `DELETE ... WHERE` over the clause {@link whereToSqlClause} compiles;
+ * A single `DELETE ... WHERE` over the clause {@link whereToSqlFragment} compiles;
  * no read-back is needed since nothing is returned. Ensuring the table exists
  * first keeps a delete against a never-written-to collection from throwing — it
  * simply removes nothing.
@@ -25,9 +25,7 @@ export const deleteMany: DeleteMany = async function deleteMany(
     slug: collection,
   });
 
-  const { clause, params } = whereToSqlClause(where);
+  const { sql, params } = whereToSqlFragment(where);
 
-  this.connection
-    .prepare(`DELETE FROM ${table} WHERE ${clause}`)
-    .run(...params);
+  this.connection.prepare(`DELETE FROM ${table} WHERE ${sql}`).run(...params);
 };

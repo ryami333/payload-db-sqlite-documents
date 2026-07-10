@@ -11,8 +11,8 @@ import { quoteSqliteIdentifier } from "./quoteSqliteIdentifier.js";
  * never break out of the surrounding SQL. Dotted paths (`author.name`) pass
  * straight through as a nested JSON path.
  *
- * Shared by the `where` ({@link whereToSqlClause}) and `sort`
- * ({@link sortToSqlClause}) translations so both agree on how a field name
+ * Shared by the `where` ({@link whereToSqlFragment}) and `sort`
+ * ({@link sortToSqlFragment}) translations so both agree on how a field name
  * becomes SQL.
  */
 export const fieldToSqlColumn = (

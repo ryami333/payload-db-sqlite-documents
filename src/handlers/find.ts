@@ -2,16 +2,16 @@ import type { Find } from "payload";
 
 import { buildPaginationMeta } from "../helpers/buildPaginationMeta.js";
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { sortToSqlClause } from "../helpers/sortToSqlClause.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { sortToSqlFragment } from "../helpers/sortToSqlFragment.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
  * Find a page of documents in a collection, returning Payload's
  * {@link import("payload").PaginatedDocs} shape.
  *
- * Builds on the same pieces as the other reads: {@link whereToSqlClause} for
- * the filter and {@link sortToSqlClause} for a deterministic `ORDER BY`, and it
+ * Builds on the same pieces as the other reads: {@link whereToSqlFragment} for
+ * the filter and {@link sortToSqlFragment} for a deterministic `ORDER BY`, and it
  * delegates `totalDocs` to {@link import("./count.js").count} so both agree on
  * how matches are counted. Pagination is computed by
  * {@link buildPaginationMeta}, which `limit: 0` / `pagination: false` collapse
@@ -29,7 +29,7 @@ export const find: Find = async function find(
     slug: collection,
   });
 
-  const { clause, params } = whereToSqlClause(where);
+  const { sql: whereSql, params } = whereToSqlFragment(where);
 
   // Delegate the total to `count` so both share one definition of "how many
   // docs match" — `find` only computes the clause a second time for the data
@@ -43,7 +43,7 @@ export const find: Find = async function find(
     totalDocs,
   });
 
-  const { clause: orderBy, params: orderParams } = sortToSqlClause(sort);
+  const { sql: orderBy, params: orderParams } = sortToSqlFragment(sort);
 
   // Keep the LIMIT/OFFSET fragment's SQL and its params together so they can't
   // drift out of sync; an empty fragment when unpaginated composes to nothing.
@@ -51,7 +51,7 @@ export const find: Find = async function find(
     ? { sql: " LIMIT ? OFFSET ?", params: [meta.limit, offset] }
     : { sql: "", params: [] };
 
-  const sql = `SELECT doc FROM ${table} WHERE ${clause} ORDER BY ${orderBy}${limitClause.sql}`;
+  const sql = `SELECT doc FROM ${table} WHERE ${whereSql} ORDER BY ${orderBy}${limitClause.sql}`;
   const queryParams = [...params, ...orderParams, ...limitClause.params];
 
   const rows = this.connection.prepare(sql).all(...queryParams);

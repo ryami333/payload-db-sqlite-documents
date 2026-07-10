@@ -1,8 +1,8 @@
 import type { UpdateMany } from "payload";
 
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { sortToSqlClause } from "../helpers/sortToSqlClause.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { sortToSqlFragment } from "../helpers/sortToSqlFragment.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
@@ -28,8 +28,8 @@ export const updateMany: UpdateMany = async function updateMany(
     slug: collection,
   });
 
-  const { clause, params } = whereToSqlClause(where);
-  const { clause: orderBy, params: orderParams } = sortToSqlClause(sort);
+  const { sql: whereSql, params } = whereToSqlFragment(where);
+  const { sql: orderBy, params: orderParams } = sortToSqlFragment(sort);
 
   // A positive limit caps how many matches are updated; 0/undefined means all.
   const limitClause =
@@ -39,7 +39,7 @@ export const updateMany: UpdateMany = async function updateMany(
 
   const rows = this.connection
     .prepare(
-      `SELECT id, doc FROM ${table} WHERE ${clause} ORDER BY ${orderBy}${limitClause.sql}`,
+      `SELECT id, doc FROM ${table} WHERE ${whereSql} ORDER BY ${orderBy}${limitClause.sql}`,
     )
     .all(...params, ...orderParams, ...limitClause.params);
 

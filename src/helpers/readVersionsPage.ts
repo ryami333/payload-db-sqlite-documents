@@ -5,8 +5,8 @@ import type { Sort, Where } from "payload";
 import type { PaginationMeta } from "./buildPaginationMeta.js";
 import { buildPaginationMeta } from "./buildPaginationMeta.js";
 import { ensureVersionsTable } from "./ensureVersionsTable.js";
-import { sortToSqlClause } from "./sortToSqlClause.js";
-import { whereToSqlClause } from "./whereToSqlClause.js";
+import { sortToSqlFragment } from "./sortToSqlFragment.js";
+import { whereToSqlFragment } from "./whereToSqlFragment.js";
 
 /**
  * Read a page of version records from the shared `payload_versions` table,
@@ -16,7 +16,7 @@ import { whereToSqlClause } from "./whereToSqlClause.js";
  * (scoped by `collection_slug`) and
  * {@link import("../handlers/findGlobalVersions.js").findGlobalVersions} (by
  * `global_slug`) — they differ only in which scope column is filtered, so it's
- * passed in. Combines {@link whereToSqlClause}, {@link sortToSqlClause} and
+ * passed in. Combines {@link whereToSqlFragment}, {@link sortToSqlFragment} and
  * {@link buildPaginationMeta} the same way {@link import("../handlers/find.js").find}
  * does for collection documents; `docs` are the parsed `TypeWithVersion` records
  * (typed loosely here since they come straight from `JSON.parse`).
@@ -42,8 +42,8 @@ export const readVersionsPage = ({
 }): { docs: any[]; meta: PaginationMeta } => {
   const table = ensureVersionsTable({ connection });
 
-  const { clause, params } = whereToSqlClause(where);
-  const scopedClause = `${scopeColumn} = ? AND ${clause}`;
+  const { sql, params } = whereToSqlFragment(where);
+  const scopedClause = `${scopeColumn} = ? AND ${sql}`;
   const scopedParams = [scopeValue, ...params];
 
   const countRow = connection
@@ -58,7 +58,7 @@ export const readVersionsPage = ({
     totalDocs,
   });
 
-  const { clause: orderBy, params: orderParams } = sortToSqlClause(sort);
+  const { sql: orderBy, params: orderParams } = sortToSqlFragment(sort);
   const limitClause = paginated
     ? { sql: " LIMIT ? OFFSET ?", params: [meta.limit, offset] }
     : { sql: "", params: [] };

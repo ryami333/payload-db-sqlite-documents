@@ -1,7 +1,7 @@
 import type { UpdateOne } from "payload";
 
 import { ensureCollectionTable } from "../helpers/ensureCollectionTable.js";
-import { whereToSqlClause } from "../helpers/whereToSqlClause.js";
+import { whereToSqlFragment } from "../helpers/whereToSqlFragment.js";
 import type { SQLiteDocumentsAdapter } from "../index.js";
 
 /**
@@ -29,15 +29,15 @@ export const updateOne: UpdateOne = async function updateOne(
   });
 
   // Payload's args are exclusively one or the other: target by id when given,
-  // otherwise by the where query. Reusing whereToSqlClause keeps id lookups on
+  // otherwise by the where query. Reusing whereToSqlFragment keeps id lookups on
   // the indexed column and matches how create stores ids (as text).
-  const { clause, params } =
+  const { sql, params } =
     id === undefined
-      ? whereToSqlClause(where)
-      : whereToSqlClause({ id: { equals: String(id) } });
+      ? whereToSqlFragment(where)
+      : whereToSqlFragment({ id: { equals: String(id) } });
 
   const row = this.connection
-    .prepare(`SELECT id, doc FROM ${table} WHERE ${clause} LIMIT 1`)
+    .prepare(`SELECT id, doc FROM ${table} WHERE ${sql} LIMIT 1`)
     .get(...params);
 
   // Nothing matched, or a row we can't read back as our own JSON — no update.
