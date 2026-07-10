@@ -1777,4 +1777,153 @@ describe("sqliteDocumentsAdapter", () => {
       expect(totalDocs).toBe(2);
     });
   });
+
+  describe("SQL injection safety", () => {
+    // A collection slug becomes a table *identifier*, which can't be a bound
+    // parameter — so it rides entirely on quoteSqliteIdentifier's escaping.
+    // These payloads would drop/rewrite a sibling table if interpolated raw.
+    const DROP_POSTS = 'evil"; DROP TABLE "posts"; --';
+
+    it("escapes a malicious collection slug instead of executing it", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "keep",
+          data: { title: "Keep" },
+        }),
+      );
+
+      // Writing to a collection whose slug is a DROP payload must NOT drop the
+      // posts table — the slug is one quoted identifier, not executable SQL.
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: DROP_POSTS,
+          customID: "x",
+          data: { title: "X" },
+        }),
+      );
+
+      const keep = await adapter.findOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "keep" } },
+        }),
+      );
+      expect(keep).not.toBeNull();
+    });
+
+    it("treats a malicious slug as its own distinct table", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: DROP_POSTS,
+          customID: "x",
+          data: { title: "X" },
+        }),
+      );
+
+      // Round-trips through the (escaped) identifier as a normal collection.
+      const found = /** @type {any} */ (
+        await adapter.findOne(
+          /** @type {any} */ ({
+            collection: DROP_POSTS,
+            where: { id: { equals: "x" } },
+          }),
+        )
+      );
+      expect(found?.title).toBe("X");
+    });
+
+    it("binds a where value so it can't inject SQL", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "keep",
+          data: { title: "Keep" },
+        }),
+      );
+
+      // A value crafted to break out of the comparison is just bound text.
+      const found = await adapter.findOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { title: { equals: '" OR "1"="1' } },
+        }),
+      );
+      expect(found).toBeNull(); // the OR-1=1 payload didn't leak the row
+
+      // And a DROP payload as a value leaves the table intact.
+      await adapter.deleteMany(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { title: { equals: '"; DROP TABLE "posts"; --' } },
+        }),
+      );
+      const { totalDocs } = await adapter.count(
+        /** @type {any} */ ({ collection: "posts" }),
+      );
+      expect(totalDocs).toBe(1);
+    });
+
+    it("binds a where field path so it can't inject SQL", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "keep",
+          data: { title: "Keep" },
+        }),
+      );
+
+      // The field name is bound into the json_extract path, never interpolated.
+      // Whether SQLite rejects it as a malformed path or just fails to match,
+      // it must not leak the row via an injected OR-1=1.
+      const evilField = 'x") = 1 OR "1"="1';
+      let matched = /** @type {any} */ (null);
+      try {
+        matched = await adapter.findOne(
+          /** @type {any} */ ({
+            collection: "posts",
+            where: { [evilField]: { equals: "zzz" } },
+          }),
+        );
+      } catch {
+        // A malformed-JSON-path error is a safe outcome — not an injection.
+      }
+      expect(matched).toBeNull();
+
+      // The row (and table) are untouched.
+      const keep = await adapter.findOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: "keep" } },
+        }),
+      );
+      expect(keep).not.toBeNull();
+    });
+
+    it("stores a malicious global slug as a bound value, not SQL", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      // The globals table name is fixed; the slug is a bound column value, so
+      // metacharacters round-trip literally with no effect on the query.
+      await adapter.createGlobal(
+        /** @type {any} */ ({
+          slug: DROP_POSTS,
+          data: { title: "Settings" },
+        }),
+      );
+
+      const found = /** @type {any} */ (
+        await adapter.findGlobal(/** @type {any} */ ({ slug: DROP_POSTS }))
+      );
+      expect(found?.title).toBe("Settings");
+    });
+  });
 });
