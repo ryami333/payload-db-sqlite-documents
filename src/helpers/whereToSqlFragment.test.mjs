@@ -148,14 +148,37 @@ describe("whereToSqlFragment", () => {
     });
   });
 
-  it("wraps contains/like values in substring wildcards", () => {
-    expect(whereToSqlFragment({ title: { contains: "ell" } })).toEqual({
+  it("wraps contains in a single substring pattern (no word split)", () => {
+    // contains matches the whole value contiguously, spaces included.
+    expect(whereToSqlFragment({ title: { contains: "hello world" } })).toEqual({
+      sql: "json_extract(doc, ?) LIKE ?",
+      params: ["$.title", "%hello world%"],
+    });
+  });
+
+  it("keeps a single-word like/not_like as a plain LIKE", () => {
+    expect(whereToSqlFragment({ title: { like: "ell" } })).toEqual({
       sql: "json_extract(doc, ?) LIKE ?",
       params: ["$.title", "%ell%"],
     });
     expect(whereToSqlFragment({ title: { not_like: "spam" } })).toEqual({
       sql: "json_extract(doc, ?) NOT LIKE ?",
       params: ["$.title", "%spam%"],
+    });
+  });
+
+  it("splits like on whitespace and requires every word (ANDed)", () => {
+    expect(whereToSqlFragment({ title: { like: "hello world" } })).toEqual({
+      sql: "(json_extract(doc, ?) LIKE ? AND json_extract(doc, ?) LIKE ?)",
+      params: ["$.title", "%hello%", "$.title", "%world%"],
+    });
+  });
+
+  it("negates a multi-word not_like with OR (De Morgan)", () => {
+    // not-all-words-present = missing at least one word.
+    expect(whereToSqlFragment({ title: { not_like: "hello world" } })).toEqual({
+      sql: "(json_extract(doc, ?) NOT LIKE ? OR json_extract(doc, ?) NOT LIKE ?)",
+      params: ["$.title", "%hello%", "$.title", "%world%"],
     });
   });
 

@@ -158,18 +158,20 @@ const operatorToSql = ({
         `${columnFragment.sql} IS ${rawValue ? "NOT NULL" : "NULL"}`,
       );
 
-    // Case-insensitive substring match (SQLite LIKE is ASCII-case-insensitive).
-    // `contains` and `like` behave identically here; a value containing `%`/`_`
-    // acts as a wildcard — a known simplification for now.
+    // Case-insensitive substring match of the whole value (SQLite LIKE is
+    // ASCII-case-insensitive); a value containing `%`/`_` acts as a wildcard — a
+    // known simplification. Unlike `like`, `contains` does not split on words.
     case "contains":
-    case "like":
       return withColumn(`${columnFragment.sql} LIKE ?`, [
         `%${textValue(rawValue)}%`,
       ]);
+
+    // `like` requires every whitespace-separated word (order-independent);
+    // `not_like` is its De Morgan negation. See likeSql.
+    case "like":
+      return likeSql({ columnFragment, negated: false, rawValue });
     case "not_like":
-      return withColumn(`${columnFragment.sql} NOT LIKE ?`, [
-        `%${textValue(rawValue)}%`,
-      ]);
+      return likeSql({ columnFragment, negated: true, rawValue });
 
     // Geospatial operators need geometry support SQLite/JSON storage doesn't
     // have — not a "yet", they're out of scope for this adapter.
@@ -240,6 +242,44 @@ const allSql = ({
 
   return {
     sql: checks.length === 1 ? checks[0] : `(${checks.join(" AND ")})`,
+    params,
+  };
+};
+
+/**
+ * Build a `like` / `not_like` fragment. Payload's `like` splits the value on
+ * whitespace and requires *every* word to appear (each a case-insensitive
+ * substring), ANDed; `not_like` is the De Morgan negation (`OR` of `NOT LIKE`),
+ * so a single-word query stays a plain `LIKE`/`NOT LIKE`. The column repeats once
+ * per word, so this builds its own params (no `withColumn`). A value with no
+ * words falls back to matching it whole, keeping behaviour defined.
+ */
+const likeSql = ({
+  columnFragment,
+  negated,
+  rawValue,
+}: {
+  columnFragment: SqlFragment;
+  negated: boolean;
+  rawValue: unknown;
+}): SqlFragment => {
+  const text = textValue(rawValue);
+  const words = text.split(/\s+/).filter((word) => word.length > 0);
+  const patterns = (words.length > 0 ? words : [text]).map(
+    (word) => `%${word}%`,
+  );
+
+  const comparison = negated ? "NOT LIKE" : "LIKE";
+  const joiner = negated ? " OR " : " AND ";
+
+  const checks = patterns.map(() => `${columnFragment.sql} ${comparison} ?`);
+  const params = patterns.flatMap((pattern) => [
+    ...columnFragment.params,
+    pattern,
+  ]);
+
+  return {
+    sql: checks.length === 1 ? checks[0] : `(${checks.join(joiner)})`,
     params,
   };
 };

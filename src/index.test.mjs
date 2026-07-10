@@ -586,6 +586,27 @@ describe("sqliteDocumentsAdapter", () => {
       ).toEqual(["Beta"]);
     });
 
+    it("like requires every word, in any order (not a contiguous match)", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      for (const title of [
+        "quick brown fox",
+        "the fox is quick",
+        "slow brown bear",
+      ]) {
+        await adapter.create(
+          /** @type {any} */ ({ collection: "posts", data: { title } }),
+        );
+      }
+
+      // Both words present regardless of order; `contains` would match neither.
+      expect(
+        await titlesMatching(adapter, { title: { like: "quick fox" } }),
+      ).toEqual(["quick brown fox", "the fox is quick"]);
+      expect(
+        await titlesMatching(adapter, { title: { contains: "quick fox" } }),
+      ).toEqual([]);
+    });
+
     it("exists distinguishes present from missing fields", async () => {
       const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
       await seed(adapter);
