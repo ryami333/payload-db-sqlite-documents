@@ -1621,4 +1621,130 @@ describe("sqliteDocumentsAdapter", () => {
       expect(nav.totalDocs).toBe(1);
     });
   });
+
+  describe("transactions", () => {
+    /** @param {any} adapter @param {string} id */
+    const findById = (adapter, id) =>
+      adapter.findOne(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { id: { equals: id } },
+        }),
+      );
+
+    it("begins with a non-null id so Payload enables transactions", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const id = await adapter.beginTransaction();
+      expect(id).not.toBeNull();
+
+      await adapter.rollbackTransaction(/** @type {any} */ (id));
+    });
+
+    it("persists writes made inside a committed transaction", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const txID = await adapter.beginTransaction();
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "kept",
+          data: { title: "Kept" },
+        }),
+      );
+      await adapter.commitTransaction(/** @type {any} */ (txID));
+
+      expect(await findById(adapter, "kept")).not.toBeNull();
+    });
+
+    it("discards writes made inside a rolled-back transaction", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      // Seed a committed row first so the table exists independently of the
+      // rolled-back work.
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "seed",
+          data: { title: "Seed" },
+        }),
+      );
+
+      const txID = await adapter.beginTransaction();
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "gone",
+          data: { title: "Gone" },
+        }),
+      );
+      await adapter.rollbackTransaction(/** @type {any} */ (txID));
+
+      expect(await findById(adapter, "gone")).toBeNull();
+      expect(await findById(adapter, "seed")).not.toBeNull();
+    });
+
+    it("supports nested transactions via savepoints", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+
+      const outer = await adapter.beginTransaction();
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "outer",
+          data: { title: "Outer" },
+        }),
+      );
+
+      const inner = await adapter.beginTransaction();
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          customID: "inner",
+          data: { title: "Inner" },
+        }),
+      );
+      // Roll back only the inner savepoint; the outer work stays pending.
+      await adapter.rollbackTransaction(/** @type {any} */ (inner));
+      await adapter.commitTransaction(/** @type {any} */ (outer));
+
+      expect(await findById(adapter, "outer")).not.toBeNull();
+      expect(await findById(adapter, "inner")).toBeNull();
+    });
+
+    it("makes a multi-row updateMany atomic on rollback", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "A", status: "draft" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "B", status: "draft" },
+        }),
+      );
+
+      const txID = await adapter.beginTransaction();
+      await adapter.updateMany(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { status: { equals: "draft" } },
+          data: { status: "published" },
+        }),
+      );
+      await adapter.rollbackTransaction(/** @type {any} */ (txID));
+
+      // Neither row's update survived.
+      const { totalDocs } = await adapter.count(
+        /** @type {any} */ ({
+          collection: "posts",
+          where: { status: { equals: "draft" } },
+        }),
+      );
+      expect(totalDocs).toBe(2);
+    });
+  });
 });

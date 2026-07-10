@@ -1,9 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
 
-import { createDatabaseAdapter, defaultBeginTransaction } from "payload";
+import { createDatabaseAdapter } from "payload";
 
 import type { BaseDatabaseAdapter, DatabaseAdapterObj, Payload } from "payload";
 
+import { createTransactionManager } from "./helpers/createTransactionManager.js";
 import { count } from "./handlers/count.js";
 import { countGlobalVersions } from "./handlers/countGlobalVersions.js";
 import { countVersions } from "./handlers/countVersions.js";
@@ -76,6 +77,11 @@ export const sqliteDocumentsAdapter = (
     // through `this.connection`; tables are created lazily per collection.
     const connection = new DatabaseSync(args.filename ?? ":memory:");
 
+    // Transactions run on this one connection, so an open BEGIN scopes every
+    // handler's writes automatically (see createTransactionManager).
+    const { beginTransaction, commitTransaction, rollbackTransaction } =
+      createTransactionManager({ connection });
+
     return createDatabaseAdapter<SQLiteDocumentsAdapter>({
       name: "sqlite-documents",
       packageName: "payload-db-sqlite-documents",
@@ -91,13 +97,12 @@ export const sqliteDocumentsAdapter = (
       defaultIDType: "text",
       migrationDir: args.migrationDir,
 
-      // Transactions must be supplied (the arg type requires them), but there's
-      // nothing to implement yet: use Payload's default begin + no-op
-      // commit/rollback so a booted Payload doesn't choke. Migration methods,
-      // by contrast, are optional and left to createDatabaseAdapter's defaults.
-      beginTransaction: defaultBeginTransaction(),
-      commitTransaction: async () => {},
-      rollbackTransaction: async () => {},
+      // Real transactions over the shared connection (BEGIN/COMMIT/ROLLBACK,
+      // with SAVEPOINTs for nesting). Migration methods, by contrast, are
+      // optional and left to createDatabaseAdapter's defaults.
+      beginTransaction,
+      commitTransaction,
+      rollbackTransaction,
 
       // Collections — reads
       count,
