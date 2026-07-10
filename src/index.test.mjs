@@ -1356,6 +1356,32 @@ describe("sqliteDocumentsAdapter", () => {
       expect(miss).toBeNull();
     });
 
+    it("supports a where on id (globals have an id column)", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      const created = /** @type {any} */ (
+        await adapter.createGlobal(
+          /** @type {any} */ ({ slug: "settings", data: { title: "Site" } }),
+        )
+      );
+
+      // id resolves to the real column, not a missing one — no SQL error.
+      const match = await adapter.findGlobal(
+        /** @type {any} */ ({
+          slug: "settings",
+          where: { id: { equals: created.id } },
+        }),
+      );
+      expect(match).not.toBeNull();
+
+      const miss = await adapter.findGlobal(
+        /** @type {any} */ ({
+          slug: "settings",
+          where: { id: { equals: "nope" } },
+        }),
+      );
+      expect(miss).toBeNull();
+    });
+
     it("returns null (but still writes) when returning is false", async () => {
       const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
 

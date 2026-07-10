@@ -36,9 +36,11 @@ export const createGlobal: CreateGlobal = async function createGlobal<
   const id = dataId ?? randomUUID();
   const doc: Record<string, unknown> = { ...data, id };
 
+  // Store id in its own column (as text, like collections) so a `where` on id
+  // resolves; slug remains the key.
   this.connection
-    .prepare(`INSERT INTO ${table} (slug, doc) VALUES (?, ?)`)
-    .run(slug, JSON.stringify(doc));
+    .prepare(`INSERT INTO ${table} (slug, id, doc) VALUES (?, ?, ?)`)
+    .run(slug, String(id), JSON.stringify(doc));
 
   return (returning === false ? null : doc) as T;
 };

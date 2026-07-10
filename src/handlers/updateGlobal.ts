@@ -38,11 +38,13 @@ export const updateGlobal: UpdateGlobal = async function updateGlobal(
   const id = existingDoc.id ?? dataId ?? randomUUID();
   const doc = { ...existingDoc, ...data, id };
 
+  // Keep the id column (text, like collections) in step with doc.id so a
+  // `where` on id resolves; slug remains the key.
   this.connection
     .prepare(
-      `INSERT INTO ${table} (slug, doc) VALUES (?, ?) ON CONFLICT(slug) DO UPDATE SET doc = excluded.doc`,
+      `INSERT INTO ${table} (slug, id, doc) VALUES (?, ?, ?) ON CONFLICT(slug) DO UPDATE SET id = excluded.id, doc = excluded.doc`,
     )
-    .run(slug, JSON.stringify(doc));
+    .run(slug, String(id), JSON.stringify(doc));
 
   return returning === false ? null : doc;
 };
