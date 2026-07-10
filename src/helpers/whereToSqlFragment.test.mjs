@@ -19,29 +19,30 @@ describe("whereToSqlFragment", () => {
     });
   });
 
-  it("reads a non-id field out of the JSON doc via a bound path", () => {
+  it("matches a non-id field via json_each with a bound path", () => {
     // The extraction path is a *parameter*, never interpolated — that's what
     // keeps an attacker-controlled field name from breaking out of the SQL.
+    // json_each (not a scalar `=`) is what makes equals array-aware.
     expect(whereToSqlFragment({ title: { equals: "Hello" } })).toEqual({
-      sql: "json_extract(doc, ?) = ?",
+      sql: "EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?)",
       params: ["$.title", "Hello"],
     });
   });
 
   it("passes dotted field paths straight through as a JSON path", () => {
     expect(whereToSqlFragment({ "author.name": { equals: "Ada" } })).toEqual({
-      sql: "json_extract(doc, ?) = ?",
+      sql: "EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?)",
       params: ["$.author.name", "Ada"],
     });
   });
 
   it("normalises boolean equals to 1/0 (how JSON booleans surface)", () => {
     expect(whereToSqlFragment({ published: { equals: true } })).toEqual({
-      sql: "json_extract(doc, ?) = ?",
+      sql: "EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?)",
       params: ["$.published", 1],
     });
     expect(whereToSqlFragment({ published: { equals: false } })).toEqual({
-      sql: "json_extract(doc, ?) = ?",
+      sql: "EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?)",
       params: ["$.published", 0],
     });
   });
@@ -54,10 +55,12 @@ describe("whereToSqlFragment", () => {
   });
 
   it("ANDs multiple field constraints together", () => {
+    // id stays a scalar `=` (indexed, never an array); the JSON field goes
+    // through json_each.
     expect(
       whereToSqlFragment({ id: { equals: "x" }, title: { equals: "y" } }),
     ).toEqual({
-      sql: '"id" = ? AND json_extract(doc, ?) = ?',
+      sql: '"id" = ? AND EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?)',
       params: ["x", "$.title", "y"],
     });
   });
@@ -68,7 +71,7 @@ describe("whereToSqlFragment", () => {
         and: [{ id: { equals: "x" } }, { title: { equals: "y" } }],
       }),
     ).toEqual({
-      sql: '("id" = ? AND json_extract(doc, ?) = ?)',
+      sql: '("id" = ? AND EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?))',
       params: ["x", "$.title", "y"],
     });
   });
@@ -91,12 +94,21 @@ describe("whereToSqlFragment", () => {
     });
   });
 
-  it("compares with not_equals as a NULL-safe inequality", () => {
-    // `IS NOT ?` (not `!= ?`) so a row missing the field still counts as
-    // "not equal", matching db-mongodb's $ne.
+  it("renders not_equals as an array-aware NOT EXISTS", () => {
+    // NOT EXISTS excludes a scalar match or array membership, and (since
+    // json_each of a missing field yields no rows) still includes rows missing
+    // the field — matching db-mongodb's $ne.
     expect(whereToSqlFragment({ status: { not_equals: "draft" } })).toEqual({
-      sql: "json_extract(doc, ?) IS NOT ?",
+      sql: "NOT EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?)",
       params: ["$.status", "draft"],
+    });
+  });
+
+  it("keeps not_equals on id as a scalar NULL-safe inequality", () => {
+    // id is never an array, so it stays a direct `IS NOT ?` on the index.
+    expect(whereToSqlFragment({ id: { not_equals: "x" } })).toEqual({
+      sql: '"id" IS NOT ?',
+      params: ["x"],
     });
   });
 

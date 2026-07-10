@@ -17,8 +17,9 @@ import type { SqlFragment, SqliteParam } from "./sqlite.types.js";
  * `contains`, `like`, `not_like`, plus `and`/`or` composition. The geospatial
  * operators (`within`, `intersects`, `near`) throw — they need geometry support
  * this JSON/SQLite storage doesn't have. Semantics track `db-mongodb` where they
- * differ from plain SQL (notably `not_equals`, which also matches absent
- * fields).
+ * differ from plain SQL: `equals`/`not_equals` are array-aware (a value matches a
+ * scalar field or an element of an array field), and `not_equals` also matches
+ * rows missing the field.
  */
 export const whereToSqlFragment = (where: Where | undefined): SqlFragment => {
   if (!where) return { sql: "1", params: [] };
@@ -112,20 +113,24 @@ const operatorToSql = ({
   });
 
   switch (operator) {
+    // Both equality operators are array-aware (see equalitySql): the value is
+    // matched against a scalar field *or* the elements of an array field.
     case "equals":
-      // `= ?` deliberately does *not* match NULL; an explicit null asks for the
-      // absent/null rows, which needs `IS NULL`.
-      return rawValue === null
-        ? withColumn(`${columnFragment.sql} IS NULL`)
-        : withColumn(`${columnFragment.sql} = ?`, [toSqliteParam(rawValue)]);
-
-    // NULL-safe inequality: a row whose field is missing (json_extract → NULL)
-    // counts as "not equal", matching db-mongodb's `$ne`. `IS NOT ?` covers both
-    // the null and non-null value cases.
+      return equalitySql({
+        columnFragment,
+        fieldPath,
+        negated: false,
+        rawValue,
+        withColumn,
+      });
     case "not_equals":
-      return withColumn(`${columnFragment.sql} IS NOT ?`, [
-        toSqliteParam(rawValue),
-      ]);
+      return equalitySql({
+        columnFragment,
+        fieldPath,
+        negated: true,
+        rawValue,
+        withColumn,
+      });
 
     case "greater_than":
       return withColumn(`${columnFragment.sql} > ?`, [toSqliteParam(rawValue)]);
@@ -187,6 +192,51 @@ const operatorToSql = ({
         `payload-db-sqlite-documents: query operator "${operator}" is not supported yet`,
       );
   }
+};
+
+/**
+ * Build an `equals` / `not_equals` fragment, array-aware to match db-mongodb.
+ *
+ * An explicit `null` targets absent/null rows directly (`IS NULL` /
+ * `IS NOT NULL`). `id` is a scalar indexed column, never an array, so it
+ * compares directly and stays on the index. For any other field the value is
+ * checked with `EXISTS (json_each(doc, path) WHERE value = ?)`: `json_each`
+ * yields one row for a scalar and one per element for an array, so the single
+ * `EXISTS` covers both a scalar match and array membership. Negated, `NOT EXISTS`
+ * also (correctly) includes rows missing the field — Mongo's `$ne` semantics.
+ */
+const equalitySql = ({
+  columnFragment,
+  fieldPath,
+  negated,
+  rawValue,
+  withColumn,
+}: {
+  columnFragment: SqlFragment;
+  fieldPath: string;
+  negated: boolean;
+  rawValue: unknown;
+  withColumn: (sql: string, params?: SqliteParam[]) => SqlFragment;
+}): SqlFragment => {
+  if (rawValue === null) {
+    return withColumn(
+      `${columnFragment.sql} IS ${negated ? "NOT NULL" : "NULL"}`,
+    );
+  }
+
+  const value = toSqliteParam(rawValue);
+
+  if (fieldPath === "id") {
+    return withColumn(`${columnFragment.sql} ${negated ? "IS NOT" : "="} ?`, [
+      value,
+    ]);
+  }
+
+  const exists = `EXISTS (SELECT 1 FROM json_each(doc, ?) WHERE value = ?)`;
+  return {
+    sql: negated ? `NOT ${exists}` : exists,
+    params: [`$.${fieldPath}`, value],
+  };
 };
 
 /**

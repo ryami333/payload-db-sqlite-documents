@@ -662,6 +662,46 @@ describe("sqliteDocumentsAdapter", () => {
         "OnlyA",
       ]);
     });
+
+    it("equals is array-aware: matches an element or a scalar", async () => {
+      const adapter = sqliteDocumentsAdapter().init({ payload: fakePayload });
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "ArrHasX", tags: ["x", "y"] },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "ScalarX", tags: "x" },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "NoX", tags: ["y", "z"] },
+        }),
+      );
+      await adapter.create(
+        /** @type {any} */ ({
+          collection: "posts",
+          data: { title: "Missing" },
+        }),
+      );
+
+      // equals "x" matches both the array containing x and the scalar "x".
+      expect(await titlesMatching(adapter, { tags: { equals: "x" } })).toEqual([
+        "ArrHasX",
+        "ScalarX",
+      ]);
+
+      // not_equals "x" excludes both of those and, per db-mongodb, still
+      // includes the row missing `tags`.
+      expect(
+        await titlesMatching(adapter, { tags: { not_equals: "x" } }),
+      ).toEqual(["Missing", "NoX"]);
+    });
   });
 
   describe("updateMany", () => {
