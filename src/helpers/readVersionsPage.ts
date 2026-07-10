@@ -42,9 +42,9 @@ export const readVersionsPage = ({
 }): { docs: any[]; meta: PaginationMeta } => {
   const table = ensureVersionsTable({ connection });
 
-  const { sql, params } = whereToSqlFragment(where);
-  const scopedClause = `${scopeColumn} = ? AND ${sql}`;
-  const scopedParams = [scopeValue, ...params];
+  const whereFragment = whereToSqlFragment(where);
+  const scopedClause = `${scopeColumn} = ? AND ${whereFragment.sql}`;
+  const scopedParams = [scopeValue, ...whereFragment.params];
 
   const countRow = connection
     .prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE ${scopedClause}`)
@@ -58,16 +58,16 @@ export const readVersionsPage = ({
     totalDocs,
   });
 
-  const { sql: orderBy, params: orderParams } = sortToSqlFragment(sort);
+  const sortFragment = sortToSqlFragment(sort);
   const limitClause = paginated
     ? { sql: " LIMIT ? OFFSET ?", params: [meta.limit, offset] }
     : { sql: "", params: [] };
 
   const rows = connection
     .prepare(
-      `SELECT doc FROM ${table} WHERE ${scopedClause} ORDER BY ${orderBy}${limitClause.sql}`,
+      `SELECT doc FROM ${table} WHERE ${scopedClause} ORDER BY ${sortFragment.sql}${limitClause.sql}`,
     )
-    .all(...scopedParams, ...orderParams, ...limitClause.params);
+    .all(...scopedParams, ...sortFragment.params, ...limitClause.params);
 
   const docs = rows.flatMap((row) =>
     typeof row.doc === "string" ? [JSON.parse(row.doc)] : [],

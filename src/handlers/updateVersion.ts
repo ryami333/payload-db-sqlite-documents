@@ -23,16 +23,16 @@ export const updateVersion: UpdateVersion = async function updateVersion(
 ) {
   const table = ensureVersionsTable({ connection: this.connection });
 
-  const { sql, params } =
+  const whereFragment =
     id === undefined
       ? whereToSqlFragment(where)
       : whereToSqlFragment({ id: { equals: String(id) } });
 
   const row = this.connection
     .prepare(
-      `SELECT doc FROM ${table} WHERE collection_slug = ? AND ${sql} LIMIT 1`,
+      `SELECT doc FROM ${table} WHERE collection_slug = ? AND ${whereFragment.sql} LIMIT 1`,
     )
-    .get(collection, ...params);
+    .get(collection, ...whereFragment.params);
 
   const existing =
     row && typeof row.doc === "string" ? JSON.parse(row.doc) : null;

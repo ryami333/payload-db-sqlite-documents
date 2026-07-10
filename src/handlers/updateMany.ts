@@ -28,8 +28,8 @@ export const updateMany: UpdateMany = async function updateMany(
     slug: collection,
   });
 
-  const { sql: whereSql, params } = whereToSqlFragment(where);
-  const { sql: orderBy, params: orderParams } = sortToSqlFragment(sort);
+  const whereFragment = whereToSqlFragment(where);
+  const sortFragment = sortToSqlFragment(sort);
 
   // A positive limit caps how many matches are updated; 0/undefined means all.
   const limitClause =
@@ -39,9 +39,13 @@ export const updateMany: UpdateMany = async function updateMany(
 
   const rows = this.connection
     .prepare(
-      `SELECT id, doc FROM ${table} WHERE ${whereSql} ORDER BY ${orderBy}${limitClause.sql}`,
+      `SELECT id, doc FROM ${table} WHERE ${whereFragment.sql} ORDER BY ${sortFragment.sql}${limitClause.sql}`,
     )
-    .all(...params, ...orderParams, ...limitClause.params);
+    .all(
+      ...whereFragment.params,
+      ...sortFragment.params,
+      ...limitClause.params,
+    );
 
   const update = this.connection.prepare(
     `UPDATE ${table} SET doc = ? WHERE id = ?`,

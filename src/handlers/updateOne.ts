@@ -31,14 +31,14 @@ export const updateOne: UpdateOne = async function updateOne(
   // Payload's args are exclusively one or the other: target by id when given,
   // otherwise by the where query. Reusing whereToSqlFragment keeps id lookups on
   // the indexed column and matches how create stores ids (as text).
-  const { sql, params } =
+  const whereFragment =
     id === undefined
       ? whereToSqlFragment(where)
       : whereToSqlFragment({ id: { equals: String(id) } });
 
   const row = this.connection
-    .prepare(`SELECT id, doc FROM ${table} WHERE ${sql} LIMIT 1`)
-    .get(...params);
+    .prepare(`SELECT id, doc FROM ${table} WHERE ${whereFragment.sql} LIMIT 1`)
+    .get(...whereFragment.params);
 
   // Nothing matched, or a row we can't read back as our own JSON — no update.
   if (!row || typeof row.id !== "string" || typeof row.doc !== "string") {

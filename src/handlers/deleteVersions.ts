@@ -22,12 +22,14 @@ export const deleteVersions: DeleteVersions = async function deleteVersions(
 ) {
   const table = ensureVersionsTable({ connection: this.connection });
 
-  const { sql, params } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
   const scopeColumn =
     collection !== undefined ? "collection_slug" : "global_slug";
   const scopeValue = collection ?? globalSlug ?? null;
 
   this.connection
-    .prepare(`DELETE FROM ${table} WHERE ${scopeColumn} = ? AND ${sql}`)
-    .run(scopeValue, ...params);
+    .prepare(
+      `DELETE FROM ${table} WHERE ${scopeColumn} = ? AND ${whereFragment.sql}`,
+    )
+    .run(scopeValue, ...whereFragment.params);
 };

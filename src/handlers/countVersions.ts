@@ -20,13 +20,13 @@ export const countVersions: CountVersions = async function countVersions(
 ) {
   const table = ensureVersionsTable({ connection: this.connection });
 
-  const { sql, params } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
 
   const row = this.connection
     .prepare(
-      `SELECT COUNT(*) AS total FROM ${table} WHERE collection_slug = ? AND ${sql}`,
+      `SELECT COUNT(*) AS total FROM ${table} WHERE collection_slug = ? AND ${whereFragment.sql}`,
     )
-    .get(collection, ...params);
+    .get(collection, ...whereFragment.params);
 
   const totalDocs = typeof row?.total === "number" ? row.total : 0;
 

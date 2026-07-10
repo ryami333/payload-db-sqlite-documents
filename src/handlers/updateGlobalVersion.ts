@@ -23,16 +23,16 @@ export const updateGlobalVersion: UpdateGlobalVersion =
   ) {
     const table = ensureVersionsTable({ connection: this.connection });
 
-    const { sql, params } =
+    const whereFragment =
       id === undefined
         ? whereToSqlFragment(where)
         : whereToSqlFragment({ id: { equals: String(id) } });
 
     const row = this.connection
       .prepare(
-        `SELECT doc FROM ${table} WHERE global_slug = ? AND ${sql} LIMIT 1`,
+        `SELECT doc FROM ${table} WHERE global_slug = ? AND ${whereFragment.sql} LIMIT 1`,
       )
-      .get(global, ...params);
+      .get(global, ...whereFragment.params);
 
     const existing =
       row && typeof row.doc === "string" ? JSON.parse(row.doc) : null;

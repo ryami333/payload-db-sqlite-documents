@@ -25,11 +25,11 @@ export const deleteOne: DeleteOne = async function deleteOne(
     slug: collection,
   });
 
-  const { sql, params } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
 
   const row = this.connection
-    .prepare(`SELECT id, doc FROM ${table} WHERE ${sql} LIMIT 1`)
-    .get(...params);
+    .prepare(`SELECT id, doc FROM ${table} WHERE ${whereFragment.sql} LIMIT 1`)
+    .get(...whereFragment.params);
 
   // Nothing matched, or a row we can't read back as our own JSON — nothing to
   // delete.

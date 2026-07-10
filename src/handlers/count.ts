@@ -25,11 +25,13 @@ export const count: Count = async function count(
     slug: collection,
   });
 
-  const { sql, params } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
 
   const row = this.connection
-    .prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE ${sql}`)
-    .get(...params);
+    .prepare(
+      `SELECT COUNT(*) AS total FROM ${table} WHERE ${whereFragment.sql}`,
+    )
+    .get(...whereFragment.params);
 
   // COUNT(*) always yields exactly one row with an integer; narrow the loose
   // SQLite output union to a number rather than trusting its static type.

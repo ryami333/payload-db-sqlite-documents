@@ -24,11 +24,11 @@ export const findOne: FindOne = async function findOne(
     slug: collection,
   });
 
-  const { sql, params } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
 
   const row = this.connection
-    .prepare(`SELECT doc FROM ${table} WHERE ${sql} LIMIT 1`)
-    .get(...params);
+    .prepare(`SELECT doc FROM ${table} WHERE ${whereFragment.sql} LIMIT 1`)
+    .get(...whereFragment.params);
 
   // `doc` is typed as SQLite's loose output union; narrow to the string we
   // wrote rather than trusting it, so a non-string can't reach JSON.parse.

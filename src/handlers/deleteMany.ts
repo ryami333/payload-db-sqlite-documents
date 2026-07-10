@@ -25,7 +25,9 @@ export const deleteMany: DeleteMany = async function deleteMany(
     slug: collection,
   });
 
-  const { sql, params } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
 
-  this.connection.prepare(`DELETE FROM ${table} WHERE ${sql}`).run(...params);
+  this.connection
+    .prepare(`DELETE FROM ${table} WHERE ${whereFragment.sql}`)
+    .run(...whereFragment.params);
 };

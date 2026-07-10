@@ -20,13 +20,13 @@ export const countGlobalVersions: CountGlobalVersions =
   ) {
     const table = ensureVersionsTable({ connection: this.connection });
 
-    const { sql, params } = whereToSqlFragment(where);
+    const whereFragment = whereToSqlFragment(where);
 
     const row = this.connection
       .prepare(
-        `SELECT COUNT(*) AS total FROM ${table} WHERE global_slug = ? AND ${sql}`,
+        `SELECT COUNT(*) AS total FROM ${table} WHERE global_slug = ? AND ${whereFragment.sql}`,
       )
-      .get(global, ...params);
+      .get(global, ...whereFragment.params);
 
     const totalDocs = typeof row?.total === "number" ? row.total : 0;
 

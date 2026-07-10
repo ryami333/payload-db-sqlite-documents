@@ -29,7 +29,7 @@ export const find: Find = async function find(
     slug: collection,
   });
 
-  const { sql: whereSql, params } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
 
   // Delegate the total to `count` so both share one definition of "how many
   // docs match" — `find` only computes the clause a second time for the data
@@ -43,7 +43,7 @@ export const find: Find = async function find(
     totalDocs,
   });
 
-  const { sql: orderBy, params: orderParams } = sortToSqlFragment(sort);
+  const sortFragment = sortToSqlFragment(sort);
 
   // Keep the LIMIT/OFFSET fragment's SQL and its params together so they can't
   // drift out of sync; an empty fragment when unpaginated composes to nothing.
@@ -51,10 +51,14 @@ export const find: Find = async function find(
     ? { sql: " LIMIT ? OFFSET ?", params: [meta.limit, offset] }
     : { sql: "", params: [] };
 
-  const sql = `SELECT doc FROM ${table} WHERE ${whereSql} ORDER BY ${orderBy}${limitClause.sql}`;
-  const queryParams = [...params, ...orderParams, ...limitClause.params];
+  const query = `SELECT doc FROM ${table} WHERE ${whereFragment.sql} ORDER BY ${sortFragment.sql}${limitClause.sql}`;
+  const queryParams = [
+    ...whereFragment.params,
+    ...sortFragment.params,
+    ...limitClause.params,
+  ];
 
-  const rows = this.connection.prepare(sql).all(...queryParams);
+  const rows = this.connection.prepare(query).all(...queryParams);
   // Each `doc` is a string we wrote; narrow rather than trust the loose SQLite
   // output type before parsing, and drop anything that somehow isn't.
   const docs = rows.flatMap((row) =>

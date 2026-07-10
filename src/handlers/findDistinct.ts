@@ -35,13 +35,13 @@ export const findDistinct: FindDistinct = async function findDistinct(
   });
 
   const { column, params: fieldParams } = fieldToSqlColumn(field);
-  const { sql, params: whereParams } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
 
   const countRow = this.connection
     .prepare(
-      `SELECT COUNT(DISTINCT ${column}) AS total FROM ${table} WHERE ${sql}`,
+      `SELECT COUNT(DISTINCT ${column}) AS total FROM ${table} WHERE ${whereFragment.sql}`,
     )
-    .get(...fieldParams, ...whereParams);
+    .get(...fieldParams, ...whereFragment.params);
   const totalDocs = typeof countRow?.total === "number" ? countRow.total : 0;
 
   const { meta, offset, paginated } = buildPaginationMeta({
@@ -62,9 +62,14 @@ export const findDistinct: FindDistinct = async function findDistinct(
 
   const rows = this.connection
     .prepare(
-      `SELECT DISTINCT ${column} AS value FROM ${table} WHERE ${sql} AND ${column} IS NOT NULL ORDER BY value ${direction}${limitClause.sql}`,
+      `SELECT DISTINCT ${column} AS value FROM ${table} WHERE ${whereFragment.sql} AND ${column} IS NOT NULL ORDER BY value ${direction}${limitClause.sql}`,
     )
-    .all(...fieldParams, ...whereParams, ...fieldParams, ...limitClause.params);
+    .all(
+      ...fieldParams,
+      ...whereFragment.params,
+      ...fieldParams,
+      ...limitClause.params,
+    );
 
   const values = rows.map((row) => ({ [field]: row.value }));
 

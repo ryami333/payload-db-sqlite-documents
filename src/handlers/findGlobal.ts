@@ -22,11 +22,13 @@ export const findGlobal: FindGlobal = async function findGlobal(
 ) {
   const table = ensureGlobalsTable({ connection: this.connection });
 
-  const { sql, params } = whereToSqlFragment(where);
+  const whereFragment = whereToSqlFragment(where);
 
   const row = this.connection
-    .prepare(`SELECT doc FROM ${table} WHERE slug = ? AND ${sql} LIMIT 1`)
-    .get(slug, ...params);
+    .prepare(
+      `SELECT doc FROM ${table} WHERE slug = ? AND ${whereFragment.sql} LIMIT 1`,
+    )
+    .get(slug, ...whereFragment.params);
 
   // `doc` is typed as SQLite's loose output union; narrow to the string we
   // wrote rather than trusting it. JSON.parse returns `any`, which satisfies the
