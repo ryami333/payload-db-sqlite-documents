@@ -18,12 +18,6 @@ export default defineConfig({
       external: [
         ...builtinModules,
         ...builtinModules.map((item) => `node:${item}`),
-        // `node:sqlite` is still experimental, so Node omits "sqlite" from
-        // `builtinModules` — externalize it explicitly, otherwise Vite treats it
-        // as a bare dependency and stubs it out "for browser compatibility",
-        // leaving `DatabaseSync` undefined in the built `dist/`.
-        "sqlite",
-        "node:sqlite",
         "payload",
       ],
     },

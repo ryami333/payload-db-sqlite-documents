@@ -20,33 +20,18 @@ Payload has no official guide for writing custom database adapters — the close
 
 The best reference implementation to study is [`@payloadcms/db-sqlite`](https://github.com/payloadcms/payload/tree/main/packages/db-sqlite). This adapter's public API (exported functions, adapter options, generated types) should aim for **near-parity with `db-sqlite`**, even though the internal storage strategy is different (documents/schemaless here vs. relational/schema-based there).
 
-## Repository layout
-
-This is a **Yarn workspaces monorepo** with two workspaces:
-
-- **`packages/db-sqlite-documents/`** — the published library (`name: payload-db-sqlite-documents`). Everything the package ships lives here: `src/`, the tsconfigs, `vite.config.mjs`, `vitest.config.mjs`, `eslint.config.mjs`, `.release-it.js`, `README.md`. **Throughout this doc, unqualified `src/…` paths refer to `packages/db-sqlite-documents/src/…`.**
-- **`sandbox/`** — a private (never-published) Next + Payload app that consumes the library via `"payload-db-sqlite-documents": "workspace:*"` to exercise it during local development. It imports the library's **built `dist/`**, so run `yarn build` before/while working in the sandbox. Its Payload admin scaffolding lives under `sandbox/src/app/(payload)/`; a `payload.config.ts` wires up `sqliteDocumentsAdapter`.
-
-The **root** `package.json` is private, holds the `workspaces` array and thin delegating scripts, and keeps repo-wide tooling (`prettier`, `.prettierrc.json`, `.prettierignore`, `.editorconfig`). Yarn config (`.yarnrc.yml`, `.yarn/`) and the single `yarn.lock` stay at the root.
-
 ## Commands
 
-Run from the repo root. The root scripts delegate to the library workspace:
-
 ```sh
-yarn build       # → library: vite build (bundles src -> dist/index.js) + tsc (emits dist/index.d.ts)
-yarn test        # → library: vitest run — single run, used in CI
-yarn test:watch  # → library: vitest — watch mode
-yarn lint        # → library: eslint .
-yarn tsc         # → library: typecheck only (base tsconfig sets noEmit; declarations are emitted by `yarn build`)
-yarn release     # → library: release-it — bumps version, tags, publishes to npm, creates GitHub release
-yarn sandbox         # sandbox: next dev  (build the library first)
-yarn sandbox:build   # sandbox: next build
+yarn build       # vite build (bundles src -> dist/index.js) + tsc (emits dist/index.d.ts)
+yarn test        # vitest run — single run, used in CI
+yarn test:watch  # vitest — watch mode
+yarn lint        # eslint .
+yarn tsc         # typecheck only (base tsconfig sets noEmit; declarations are emitted by `yarn build`)
+yarn release     # release-it — bumps version, tags, publishes to npm, creates GitHub release
 ```
 
-Any of these can also be run directly against a workspace, e.g. `yarn workspace payload-db-sqlite-documents test` or `yarn workspace sandbox dev`. Formatting is repo-wide from the root: `yarn prettier . --check`.
-
-To run a single test file: `yarn workspace payload-db-sqlite-documents vitest run src/index.test.mjs`. To run tests matching a name: append `-t "pattern"`.
+To run a single test file: `yarn vitest run src/index.test.mjs`. To run tests matching a name: `yarn vitest run -t "pattern"`.
 
 **After making any code changes, format the touched files:**
 
@@ -56,12 +41,12 @@ yarn prettier <path> --write
 
 ## Tooling notes
 
-- Package manager is **Yarn Berry (4.17.1)**, pinned via `packageManager` in the root `package.json` and vendored at `.yarn/releases/yarn-4.17.1.cjs`, with `nodeLinker: node-modules` (in `.yarnrc.yml`). Use `yarn`, not `npm`. There is one `yarn.lock` at the root covering every workspace.
-- The library's source is **TypeScript** (`.ts`) in `packages/db-sqlite-documents/src/`. Vite compiles/bundles it and `tsc --emitDeclarationOnly` generates `.d.ts` declarations. `tsconfig.json`'s `include` is scoped to `src/**/*` — its sibling config files are intentionally not typechecked by `tsc`. `allowJs` + `checkJs` are on, so the `.mjs` test files are typechecked too (Vitest still transforms/runs them via Vite). (The `sandbox/` workspace has its own separate `tsconfig.json` for Next.)
-- The library has **two tsconfigs** (both under `packages/db-sqlite-documents/`): `tsconfig.json` is typecheck-only (`noEmit: true`) and covers everything under `src/` including `*.test.mjs` — this is what `yarn tsc` uses. `tsconfig.build.json` extends it, flips `noEmit` off (`emitDeclarationOnly`), and excludes test files; this is what `yarn build`'s `tsc` step uses, so test declarations never leak into `dist/` (and thus into the published package).
-- `vite.config.mjs` builds `src/index.ts` as an ES library entry to `dist/index.js`; the `rolldownOptions.external` list keeps peer/runtime dependencies out of the bundle so only `src/**` is bundled — Node builtins (with and without the `node:` prefix) plus `payload`. **`node:sqlite` is externalized explicitly** (as both `"sqlite"` and `"node:sqlite"`) because it is still experimental and Node omits `"sqlite"` from `module.builtinModules`; without that, Vite treats it as a bare dependency and stubs it out "for browser compatibility", leaving `DatabaseSync` undefined in the built `dist/` (the library's own tests wouldn't catch this — they run against `src/`, not `dist/`; the `sandbox` consuming `dist/` is what surfaces it). Each new runtime dependency must be added to this list explicitly. `package.json#exports` and `#types` point at `dist/index.js` / `dist/index.d.ts` — if new entry points are added (mirroring `db-sqlite`'s subpath exports, e.g. a `./types` export), they need to be added in three places: `vite.config.mjs` `build.lib.entry`, `tsconfig.json`/`tsconfig.build.json` (if scope changes), and `package.json#exports`.
-- CI (`.github/workflows/quality-assurance.yml`) runs against Node 22/24/26. The `quality-assurance` job matrix runs `yarn workspace payload-db-sqlite-documents test` on each Node version; the `formatting` job runs `yarn workspace payload-db-sqlite-documents build`, `… lint`, `… tsc`, and the repo-wide `yarn prettier . --check` on Node 22. Install (`yarn install --immutable`) happens once at the root and provisions all workspaces (including the sandbox's Next/Payload deps).
-- `.release-it.js` lives in `packages/db-sqlite-documents/` and releases run from that workspace. It runs `prettier . --check`, `tsc` (typecheck-only via the base config's `noEmit`), `eslint .`, and `yarn test` as pre-release gates (`before:init`), and rebuilds (`after:bump`) before publishing. Releases require a clean working directory on `main` with an upstream branch.
+- Package manager is **Yarn Berry (4.17.0)**, pinned via `packageManager` in `package.json` and vendored at `.yarn/releases/yarn-4.17.0.cjs`. Use `yarn`, not `npm`.
+- Source is **TypeScript** (`.ts`) in `src/`. Vite compiles/bundles it and `tsc --emitDeclarationOnly` generates `.d.ts` declarations. `tsconfig.json`'s `include` is scoped to `src/**/*` — root-level config files are intentionally not typechecked by `tsc`. `allowJs` + `checkJs` are on, so the `.mjs` test files are typechecked too (Vitest still transforms/runs them via Vite).
+- There are **two tsconfigs**: `tsconfig.json` is typecheck-only (`noEmit: true`) and covers everything under `src/` including `*.test.mjs` — this is what `yarn tsc` uses. `tsconfig.build.json` extends it, flips `noEmit` off (`emitDeclarationOnly`), and excludes test files; this is what `yarn build`'s `tsc` step uses, so test declarations never leak into `dist/` (and thus into the published package).
+- `vite.config.mjs` builds `src/index.ts` as an ES library entry to `dist/index.js`; the `rolldownOptions.external` list keeps peer/runtime dependencies out of the bundle so only `src/**` is bundled — Node builtins (with and without the `node:` prefix) plus `payload`. Each new runtime dependency (e.g. the eventual SQLite driver) must be added to this list explicitly. `package.json#exports` and `#types` point at `dist/index.js` / `dist/index.d.ts` — if new entry points are added (mirroring `db-sqlite`'s subpath exports, e.g. a `./types` export), they need to be added in three places: `vite.config.mjs` `build.lib.entry`, `tsconfig.json`/`tsconfig.build.json` (if scope changes), and `package.json#exports`.
+- CI (`.github/workflows/quality-assurance.yml`) runs against Node 22/24/26. The `quality-assurance` job matrix re-runs `yarn up @types/node@<version>` per Node version before typechecking, so typechecking is validated against each supported Node's types — don't assume a single pinned `@types/node` version is authoritative.
+- `.release-it.js` runs `prettier --check`, `tsc` (typecheck-only via the base config's `noEmit`), `eslint .`, and `yarn test` as pre-release gates (`before:init`), and rebuilds (`after:bump`) before publishing. Releases require a clean working directory on `main` with an upstream branch.
 
 ## Coding conventions
 
